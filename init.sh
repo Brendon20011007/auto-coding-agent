@@ -1,37 +1,19 @@
 #!/bin/bash
 
-# =============================================================================
-# init.sh - Project Initialization Script
-# =============================================================================
-# Run this script at the start of every session to ensure the environment
-# is properly set up and the development server is running.
-# =============================================================================
+echo "🔄 Initializing environment..."
 
-set -e
+cd hello-nextjs || { echo "Directory hello-nextjs not found! Exiting."; exit 1; }
 
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+echo "📦 Checking and installing dependencies..."
+npm install
 
-echo -e "${YELLOW}Initializing Spring FES Video project...${NC}"
+if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null ; then
+    echo "✅ Development server is already running on port 3000."
+else
+    echo "🚀 Starting development server in the background..."
+    npm run dev > dev.log 2>&1 &
+    sleep 5
+    echo "✅ Development server started."
+fi
 
-# Install dependencies
-echo "Installing dependencies..."
-cd hello-nextjs && npm install && cd ..
-
-# Start development server in background
-echo "Starting development server..."
-cd hello-nextjs
-npm run dev &
-SERVER_PID=$!
-cd ..
-
-# Wait for server to be ready
-echo "Waiting for server to start..."
-sleep 3
-
-echo -e "${GREEN}✓ Initialization complete!${NC}"
-echo -e "${GREEN}✓ Dev server running at http://localhost:3000 (PID: $SERVER_PID)${NC}"
-echo ""
-echo "Ready to continue development."
+echo "✅ Environment initialization complete."
