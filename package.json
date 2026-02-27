@@ -1,0 +1,28 @@
+{
+  "name": "create-notion-agent",
+  "version": "1.0.0",
+  "description": "Scaffold a Notion-integrated autonomous agent workflow for Claude Code, Gemini CLI, or GitHub Copilot",
+  "bin": {
+    "create-notion-agent": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "templates/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "gemini",
+    "copilot",
+    "notion",
+    "agent",
+    "workflow",
+    "mcp",
+    "ai-agent",
+    "scaffold"
+  ]
+}

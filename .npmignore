@@ -1,0 +1,11 @@
+hello-nextjs/
+supabase/
+automation-logs/
+progress.txt
+task.json
+architecture.md
+init.sh
+start-work.sh
+run-automation.sh
+.git/
+.gitignore
