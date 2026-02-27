@@ -6,7 +6,7 @@ A video processing application with Next.js frontend.
 
 ## Notion Integration Context
 
-- **Target Database ID**: [在这里填入你的_Database_ID]
+- **Target Database ID**: {{DB_ID}}
 - **Task Statuses**: `To Do`, `In Progress`, `Done`, `Blocked`
 - **Target Properties**: `Task Name`, `Status`, `Description`, `Agent Report`
 
