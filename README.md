@@ -1,80 +1,348 @@
-# 全自动编程 Agent 实验
+# create-notion-agent
 
-## 免责声明
+> Scaffold a Notion-integrated autonomous AI agent workflow into any project — for **Claude Code**, **Gemini CLI**, or **GitHub Copilot**.
 
-本项目所有（100%）代码和提示词均由 AI 生成。运行前请自行审查，任何后果概不负责。
+```bash
+npx create-notion-agent
+```
 
-## 前提（由人类撰写）
+---
 
-所有内容，建立在以下前提下，如果不认可，速速关闭这个页面：
+## What It Does
 
-**即使在非常复杂的项目中，AI 已经能够帮我们写绝大部分（甚至全部）代码。如果不行，不是 AI 的问题，是使用者本身的问题。AI 不是程序员的 bottleneck，程序员错误和老旧的工作方式是 AI 的 bottleneck。写代码本身将会越来越没有价值。**
+`create-notion-agent` is a zero-dependency CLI that copies a battle-tested autonomous agent workflow into your project directory. The agent reads tasks from a **Notion database**, implements them one at a time, tests the output, commits the code, and updates Notion — all without human intervention.
 
-程序员的工作内容将会转变，从写代码，变成如何控制 AI。高效使用 AI 生成可用的项目，成为程序员新的核心竞争力。因此我们要探索的是：如何更好的在开发中使用 AI。
+```
+Your Notion Database  →  AI Agent  →  Code committed to Git
+     (task queue)         (Claude / Gemini / Copilot)
+```
 
-## 项目背景（由人类撰写）
+The workflow was built and validated over a 10-hour unattended coding session that produced a full-stack Next.js application with Supabase, AI image generation, and video generation — with every single commit authored by the agent.
 
-起因是[这篇 Anthropic 的文章](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)，他们做了一个自动编程 Agent。
+---
 
-为了测试新发布的 GLM-5，同时切身感受这种超长自动编程 Agent 的表现（一箭双雕），我做了这个 10 小时的实验。你在 git commit 记录里能看到 10 个小时我让 AI 做的所有事。
+## Quick Start
 
-这种开发方式的目的，不是为了用 AI 替代程序员。对 AI 的“掌控”仍然由程序员负责。我们仍然需要人工判断 AI 做的是否正确，为 AI 指引方向。并不是无脑开发。
+### 1. Run the installer
 
-[这个视频](https://www.bilibili.com/video/BV1zZcYz1EMy/)详细解释了项目的完整过程。一些观众评论，认为视频内容有吹牛成分。标题党确实是我的惯用手段（不然你也不会看到这个项目和视频😂）。但视频里所有展示的开发过程，都没有任何夸大，均为客观事实。
+```bash
+npx create-notion-agent
+```
 
-## 超长时间自动编程 Agent 的具体内容
+You will be prompted for:
 
-完整开发流程定义在 `CLAUDE.md` 中：
+| Prompt | Description |
+|--------|-------------|
+| **Which AI CLI?** | Claude Code / Gemini CLI / GitHub Copilot / All three |
+| **Notion Database ID** | From your Notion database URL (can be filled in later) |
+| **Notion API Token** | From [notion.so/profile/integrations](https://www.notion.so/profile/integrations) — used to auto-configure the MCP server (optional) |
 
-1. **初始化环境**：运行 `./init.sh`，安装依赖并启动开发服务器
-2. **选择任务**：读取 `task.json`，选择一个 `passes: false` 的任务
-3. **实现任务**：按照任务描述的步骤实现功能
-4. **测试验证**：运行 `npm run lint` 和 `npm run build` 确保代码正确。使用浏览器打开应用测试（需要安装 playwright mcp）
-5. **更新进度**：将工作记录到 `progress.txt`
-6. **提交更改**：一次性提交所有更改（包括 task.json 更新）
+### 2. Make scripts executable
 
-这些内容也全部由 AI 生成。
+```bash
+chmod +x init.sh start-work.sh
+```
 
-## AI 视频项目
+### 3. Initialize the environment
 
-本仓库包含 **hello-nextjs** 项目，这是一个使用本上面提到的方式，开发的 AI 视频生成应用。项目本身并不复杂，但囊括了前后端、数据库、第三方生图、生视频大模型 API 等内容。可以查看 architecture.md 了解项目细节。
+```bash
+./init.sh
+```
 
-**hello-nextjs** 的目的是为了通过实战，调试和优化提示词，验证这套自动开发方式的运行情况。
+### 4. Start the agent
 
-progress.txt 和 Git 历史记录可以追溯 AI 生成这个项目的完整过程。除 2 个特别的git提交外，其他所有的 git 提交都是由 AI 完成的。那 2 个人工提交的 commit，是 markdown 文件的修改。但文件内容仍是 AI 生成。
+```bash
+./start-work.sh        # Claude Code
+# or launch Gemini CLI / Copilot manually (see below)
+```
 
-项目的生成过程如下：
-- 向 AI 描述需求，写出 architecture.md 和 task.json。
-- 开始反复要求 AI 完成下一个任务。
-- 任务全部完成后，要求 AI 完整测试项目流程。
+---
 
 ## Prerequisites
 
-- claude code
-- playwright mcp（这是作者在该项目里唯一安装的 mcp）
+| Requirement | Notes |
+|-------------|-------|
+| **Node.js ≥ 16** | Required to run the installer |
+| **A Notion account** | Free tier is sufficient |
+| **Notion Integration** | Create one at [notion.so/profile/integrations](https://www.notion.so/profile/integrations) |
+| **An AI CLI** | At least one of: Claude Code, Gemini CLI, GitHub Copilot CLI |
 
-## 使用方式
+---
 
-删除 hello-nextjs，然后让 AI 根据你的项目需求，重写 task.json 和 progress.txt。然后就可以让 AI 生成代码。生成中遇到流程上的问题，可以让 AI 修改 CLAUDE.md。
+## Notion Database Setup
 
-### 方式一：通过 Claude Code 运行（最稳妥）
+The agent expects a Notion database with these exact properties:
 
-手动启动 Claude Code，让 AI 执行下一个任务。
+| Property Name | Type | Description |
+|---------------|------|-------------|
+| `Task Name` | Title | The name of the task |
+| `Status` | Select | One of: `To Do`, `In Progress`, `Done`, `Blocked` |
+| `Description` | Text | Full task requirements — the agent reads this |
+| `Agent Report` | Text | Written by the agent after completing or blocking |
 
-### 方式二：使用 dangerously skip permission 模式（次选）
+### Status Lifecycle
 
-使用 `--dangerously-skip-permissions` 参数运行 Claude Code，AI 可以在无需人工确认的情况下完成下一个任务。这是作者在实验中最常用的方式。
-
-```bash
-claude -p --dangerously-skip-permissions
+```
+To Do  →  In Progress  →  Done
+                       ↘  Blocked  (if something goes wrong)
 ```
 
-### 方式三：使用自动化脚本（不推荐）
+### Getting Your Database ID
 
-使用 `run-automation.sh` 脚本让 AI 循环运行多次：
+Your Notion database URL looks like:
 
-```bash
-./run-automation.sh 10  # 运行 10 次
+```
+https://www.notion.so/myworkspace/[DATABASE_ID]?v=...
 ```
 
-**警告**：这种方式最危险，最容易浪费资源。人不在电脑边，又想让 AI 工作时可以使用。
+Copy the `DATABASE_ID` segment (32-character UUID).
+
+---
+
+## What Gets Installed
+
+### Claude Code
+
+```
+your-project/
+├── CLAUDE.md           ← Agent workflow instructions
+├── init.sh             ← Install deps + start dev server
+├── start-work.sh       ← Launch Claude Code in autonomous mode
+└── .claude/
+    └── settings.json   ← Notion MCP server config (if token provided)
+```
+
+**`CLAUDE.md`** contains the full SOP the agent follows:
+1. Run `init.sh` to set up the environment
+2. Query Notion for the first `To Do` task → set to `In Progress`
+3. Implement the task following existing code conventions
+4. Run `npm run lint` and `npm run build` (zero errors required)
+5. Test UI changes in the browser via Playwright MCP
+6. Append a summary to `progress.txt`
+7. Update Notion status to `Done` + write `Agent Report`
+8. Commit everything in one atomic commit
+
+**`start-work.sh`** invokes Claude with `--dangerously-skip-permissions` so the agent runs fully autonomously.
+
+### Gemini CLI
+
+```
+your-project/
+├── GEMINI.md           ← Same workflow adapted for Gemini CLI
+└── .gemini/
+    └── settings.json   ← Notion MCP SSE config (if token provided)
+```
+
+The `GEMINI.md` file follows the same workflow but is adapted for Gemini's conventions. Gemini CLI uses the Notion MCP server via SSE (Server-Sent Events) transport.
+
+### GitHub Copilot
+
+```
+your-project/
+└── .github/
+    └── copilot-instructions.md  ← Workspace-level agent instructions
+```
+
+GitHub Copilot reads `.github/copilot-instructions.md` automatically as workspace instructions. Since Copilot does not yet support MCP servers, the MCP setup step is skipped and the init/start scripts are not included.
+
+---
+
+## MCP Auto-Configuration
+
+When you provide a Notion API Token, the installer writes the MCP server configuration automatically.
+
+### Claude Code — `.claude/settings.json`
+
+```json
+{
+  "mcpServers": {
+    "notion": {
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env": {
+        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer YOUR_TOKEN\", \"Notion-Version\": \"2022-06-28\"}"
+      }
+    }
+  }
+}
+```
+
+The `@notionhq/notion-mcp-server` package is fetched on first use via `npx` — nothing to install manually.
+
+### Gemini CLI — `.gemini/settings.json`
+
+```json
+{
+  "mcpServers": {
+    "notion": {
+      "httpUrl": "https://mcp.notion.com/sse",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      }
+    }
+  }
+}
+```
+
+### Manual MCP Setup (if you skipped the token)
+
+**Claude Code:**
+```bash
+claude mcp add notion-api -- npx -y @notionhq/notion-mcp-server
+```
+Then edit `.claude/settings.json` to add your token to `OPENAPI_MCP_HEADERS`.
+
+**Gemini CLI:**
+Edit `~/.gemini/settings.json` and add the `mcpServers.notion` block shown above.
+
+---
+
+## Agent Workflow (Detail)
+
+Every agent session follows this exact sequence:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Step 1  Initialize                                          │
+│         Run ./init.sh → install deps → start dev server     │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│ Step 2  Fetch Task                                          │
+│         notion_query_database → filter Status = "To Do"     │
+│         notion_update_page   → set Status = "In Progress"   │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│ Step 3  Implement                                           │
+│         Read Description → write code → follow conventions  │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│ Step 4  Test (MANDATORY)                                    │
+│         npm run lint  → 0 errors                            │
+│         npm run build → must succeed                        │
+│         Browser test  → for UI changes (Playwright MCP)     │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│ Step 5  Document                                            │
+│         Append summary to progress.txt                      │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│ Step 6  Commit & Update Notion (atomic)                     │
+│         notion_update_page → Status = "Done"                │
+│         git add . && git commit -m "[Task] - completed"     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Blocking Protocol
+
+If the agent hits an unrecoverable error (missing env vars, external service down, bug after 3 retries):
+
+1. Sets Notion task to **`Blocked`**
+2. Writes the exact error to `Agent Report`
+3. Appends the reason to `progress.txt`
+4. **Stops without committing**
+
+This prevents broken code from being committed and makes failures visible in your Notion board.
+
+---
+
+## Running Multiple Tasks (Automation Loop)
+
+After installing, you can run the agent in a loop to process all `To Do` tasks back-to-back:
+
+```bash
+# Run Claude Code 10 times (each run = one Notion task)
+for i in $(seq 1 10); do ./start-work.sh; done
+```
+
+Or, if you have a `run-automation.sh` in your project:
+
+```bash
+./run-automation.sh 10
+```
+
+> **Warning:** Unattended automation bypasses all human review checkpoints. Monitor `progress.txt` and your Notion board between runs. Do not use on production-critical systems without understanding the risks.
+
+---
+
+## Customizing the Workflow
+
+After installation, edit the files directly to adapt the workflow to your project:
+
+| File | What to customize |
+|------|-------------------|
+| `CLAUDE.md` / `GEMINI.md` | Add project-specific conventions, tech stack details, test commands |
+| `init.sh` | Change the port, add env var checks, seed a database |
+| `start-work.sh` | Adjust the system prompt passed to the agent |
+| `.claude/settings.json` | Add additional MCP servers (Playwright, GitHub, etc.) |
+
+### Recommended Additional MCP Servers
+
+**Playwright** (browser testing — strongly recommended for UI projects):
+```bash
+claude mcp add playwright -- npx -y @playwright/mcp
+```
+
+**GitHub** (for PR creation, issue tracking):
+```bash
+claude mcp add github -- npx -y @modelcontextprotocol/server-github
+```
+
+---
+
+## Project Structure Reference
+
+After running `npx create-notion-agent` with all three CLI targets selected:
+
+```
+your-project/
+├── CLAUDE.md                          # Claude Code workflow
+├── GEMINI.md                          # Gemini CLI workflow
+├── init.sh                            # Environment initialization
+├── start-work.sh                      # Claude Code launcher
+├── progress.txt                       # Agent session log (auto-generated)
+├── .claude/
+│   └── settings.json                  # Claude Code MCP config
+├── .gemini/
+│   └── settings.json                  # Gemini CLI MCP config
+└── .github/
+    └── copilot-instructions.md        # GitHub Copilot instructions
+```
+
+---
+
+## Frequently Asked Questions
+
+**Q: Does the agent commit code automatically?**
+Yes. `start-work.sh` runs Claude with `--dangerously-skip-permissions`, which means it executes `git commit` without asking for confirmation. Review `progress.txt` and git log after each session.
+
+**Q: Can I use this without a Next.js project?**
+Yes. The workflow files are framework-agnostic. Edit `CLAUDE.md` to replace the Next.js-specific test commands (`npm run lint`, `npm run build`) with whatever your project uses.
+
+**Q: What if I don't have a Notion token yet?**
+Skip it during installation. The workflow files are still copied with a `[YOUR_NOTION_DATABASE_ID]` placeholder. Add the MCP config manually later using the snippets in the MCP section above.
+
+**Q: Does this work on Windows?**
+The `bin/cli.js` installer works on Windows. The `init.sh` and `start-work.sh` shell scripts require WSL, Git Bash, or a Unix-like shell.
+
+**Q: Can I run multiple agents in parallel?**
+Not recommended against the same Notion database. The agent picks the first `To Do` task and immediately marks it `In Progress`. Running two agents simultaneously may cause them to pick the same task.
+
+---
+
+## License
+
+MIT
+
+---
+
+## Related Links
+
+- [Claude Code documentation](https://docs.anthropic.com/claude-code)
+- [Gemini CLI documentation](https://github.com/google-gemini/gemini-cli)
+- [Notion MCP server](https://www.npmjs.com/package/@notionhq/notion-mcp-server)
+- [Model Context Protocol](https://modelcontextprotocol.io)
