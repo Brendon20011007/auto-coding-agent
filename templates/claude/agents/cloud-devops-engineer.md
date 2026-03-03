@@ -449,11 +449,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Node.js example — adapt for your stack (Python, Go, Rust, etc.)
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-      - run: cd hello-nextjs && npm ci
-      - run: cd hello-nextjs && npm run lint
-      - run: cd hello-nextjs && npm run build
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
 
   terraform-validate:
     runs-on: ubuntu-latest
@@ -506,17 +507,18 @@ jobs:
 ### 9. Containerization (Docker)
 
 ```dockerfile
+# Example for a Node.js app — adapt COPY paths and RUN commands for your stack
 FROM node:20-alpine AS base
 
 FROM base AS deps
 WORKDIR /app
-COPY hello-nextjs/package*.json ./
+COPY package*.json ./
 RUN npm ci --production
 
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY hello-nextjs/ .
+COPY . .
 RUN npm run build
 
 FROM base AS runner
@@ -593,7 +595,7 @@ Before deploying:
 - [ ] AWS IAM follows least privilege
 - [ ] Database migrations are idempotent
 - [ ] RLS policies configured for all tables
-- [ ] `npm run build` succeeds
+- [ ] Build succeeds (use stack-appropriate command: `npm run build`, `go build ./...`, `cargo build`, etc.)
 - [ ] No hardcoded localhost URLs in production code
 - [ ] CI pipeline is green on the target branch
 - [ ] Health check endpoint returns 200

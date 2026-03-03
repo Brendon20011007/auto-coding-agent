@@ -24,9 +24,9 @@ Use Notion **strictly** for fetching tasks and updating their status. Use the Ob
 
 # Project Context
 
-A [your project type] application.
+This workflow is **stack-agnostic** and works with any language or framework. The agent detects your project type at runtime by scanning config files — no manual configuration needed.
 
-> Note: Detailed project requirements are managed dynamically via a Notion Database.
+> Detailed task requirements are managed dynamically via the Notion Database above.
 
 ---
 
@@ -34,11 +34,25 @@ A [your project type] application.
 
 Every new agent session MUST follow this workflow strictly in order:
 
-### Step 1: Initialize Environment
+### Step 1: Initialize Environment & Scan Project
 
 Run `./init.sh`
 
-This will install dependencies, start the development server (`http://localhost:3000`), and ensure the Obsidian vault directory structure exists. DO NOT skip this step.
+This installs dependencies and ensures the Obsidian vault directory structure exists. DO NOT skip this step.
+
+**After `init.sh` completes, scan the project root for config files to determine the stack and available commands:**
+
+| Config file found | Stack | Install | Lint | Test | Build |
+|-------------------|-------|---------|------|------|-------|
+| `package.json` | Node/JS/TS | `npm install` | from `scripts.lint` | from `scripts.test` | from `scripts.build` |
+| `pyproject.toml` / `setup.py` / `requirements.txt` | Python | `pip install -e .` or `pip install -r requirements.txt` | `ruff check .` / `flake8` | `pytest` | n/a |
+| `go.mod` | Go | `go mod download` | `go vet ./...` | `go test ./...` | `go build ./...` |
+| `Cargo.toml` | Rust | `cargo fetch` | `cargo clippy` | `cargo test` | `cargo build` |
+| `Makefile` | Any | `make install` (if target exists) | `make lint` | `make test` | `make build` |
+
+Also read `CONTRIBUTING.md`, `.editorconfig`, and any linter config files (`.eslintrc`, `pyproject.toml [tool.ruff]`, etc.) — treat them as authoritative for style rules.
+
+If no recognised config is found, ask the agent task description or README for guidance.
 
 ### Step 2: Fetch Task from Notion
 
@@ -64,13 +78,14 @@ If the vault path is not configured or no relevant files exist, continue to Step
 - Implement the functionality to satisfy all requirements in the Notion task description.
 - Follow existing code patterns, conventions, and any Architecture notes retrieved in Step 3.
 
-**Testing (MANDATORY — all checks must pass):**
-- **Major UI Changes**: MUST be tested in the browser using the MCP Playwright tool. Verify rendering, clicks, and form submissions.
-- **Minor Changes**: Validate via unit tests or lint/build.
-- **Strict Checks**:
-  - `npm run lint` passes with 0 errors.
-  - `npm run build` succeeds.
-  - No TypeScript errors.
+**Testing (MANDATORY — all three gates must pass):**
+
+1. **Lint gate** — run the lint command discovered in Step 1. Zero errors required.
+2. **Test gate** — run the test command discovered in Step 1. All tests must pass.
+3. **Build gate** — run the build command discovered in Step 1 (if applicable). Must succeed with no errors.
+4. **Browser gate** (UI projects only) — for major visual changes, verify rendering, clicks, and form submissions using the MCP Playwright tool.
+
+If the project has no explicit test command, validate with a lint + build check at minimum.
 
 ### Step 5: Document Post-Mortem (Obsidian) & Update Progress
 
@@ -146,29 +161,33 @@ If a task cannot be completed, YOU MUST STOP AND ASK FOR HUMAN INTERVENTION:
 ```
 /
 ├── CLAUDE.md          # This workflow file
-├── start-work.sh      # Trigger script
-├── progress.txt       # Progress log
-├── init.sh            # Initialization script
-└── [your-app]/        # Your application
-    ├── src/
-    └── ...
+├── start-work.sh      # Agent trigger script
+├── progress.txt       # Session progress log
+├── init.sh            # Environment initialization
+└── <your-app>/        # Application directory — discovered at runtime
 ```
 
-## Commands
+The application directory and its structure are discovered at runtime by scanning for config files (see Step 1). The agent does not assume a specific layout.
 
-```bash
-# Adjust these for your project
-npm run dev      # Start dev server
-npm run build    # Production build
-npm run lint     # Run linter
-```
+## Command Discovery
+
+| Config file | Commands used |
+|-------------|---------------|
+| `package.json` | `scripts.lint`, `scripts.test`, `scripts.build`, `scripts.dev` |
+| `pyproject.toml` / `setup.py` | `pytest`, `ruff`/`flake8`, `mypy` |
+| `go.mod` | `go vet ./...`, `go test ./...`, `go build ./...` |
+| `Cargo.toml` | `cargo clippy`, `cargo test`, `cargo build` |
+| `Makefile` | `make lint`, `make test`, `make build` |
+
+The agent reads these files at the start of every session and uses the commands it finds. No manual configuration is needed.
 
 ## Coding Conventions
 
-- TypeScript strict mode
-- Functional components with hooks
-- Tailwind CSS for styling
-- Write tests for new features
+- Read existing files in the target area **before** writing new code
+- Match the style, naming patterns, and idioms already present in the codebase
+- If a `CONTRIBUTING.md`, `.editorconfig`, or linter config exists, treat it as authoritative
+- Prefer editing existing files over creating new ones when extending functionality
+- Write tests for new behaviour, following whatever test framework is already in use
 
 ---
 

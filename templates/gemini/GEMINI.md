@@ -1,8 +1,8 @@
 # Project Context
 
-A video processing application with Next.js frontend.
+This workflow is **stack-agnostic** and works with any language or framework. The agent detects your project type at runtime by scanning config files.
 
-> Note: Detailed project requirements are managed dynamically via a Notion Database.
+> Detailed task requirements are managed dynamically via a Notion Database.
 
 ## Notion Integration Context
 
@@ -16,11 +16,24 @@ A video processing application with Next.js frontend.
 
 Every new Gemini CLI agent session MUST follow this workflow strictly in order:
 
-### Step 1: Initialize Environment
+### Step 1: Initialize Environment & Scan Project
 
 Run `./init.sh`
 
-This will install dependencies and start the development server at `http://localhost:3000`. DO NOT skip this step.
+This installs dependencies and ensures the Obsidian vault directory structure exists. DO NOT skip this step.
+
+**After `init.sh` completes, scan the project root for config files to determine the stack and available commands:**
+
+| Config file found | Install | Lint | Test | Build |
+|-------------------|---------|------|------|-------|
+| `package.json` | `npm install` | from `scripts.lint` | from `scripts.test` | from `scripts.build` |
+| `pyproject.toml` / `setup.py` | `pip install -e .` | `ruff` / `flake8` | `pytest` | n/a |
+| `requirements.txt` | `pip install -r requirements.txt` | `ruff` / `flake8` | `pytest` | n/a |
+| `go.mod` | `go mod download` | `go vet ./...` | `go test ./...` | `go build ./...` |
+| `Cargo.toml` | `cargo fetch` | `cargo clippy` | `cargo test` | `cargo build` |
+| `Makefile` | `make install` | `make lint` | `make test` | `make build` |
+
+Also read `CONTRIBUTING.md` and any linter config files for project style rules.
 
 ### Step 2: Fetch Next Task from Notion
 
@@ -41,10 +54,12 @@ After implementation, verify ALL steps:
 
 - **Major UI Changes**: Test in the browser. Verify rendering, navigation, and form submissions.
 - **Minor Changes**: Validate via unit tests or lint/build.
-- **Strict Checks**:
-  - `npm run lint` passes with 0 errors.
-  - `npm run build` succeeds.
-  - No TypeScript errors.
+**Strict Checks (all three gates must pass):**
+
+1. **Lint** — run the lint command discovered in Step 1. Zero errors required.
+2. **Tests** — run the test command discovered in Step 1. All tests must pass.
+3. **Build** — run the build command discovered in Step 1 (if applicable). Must succeed.
+4. **Browser** (UI projects only) — for major visual changes, verify in the browser that rendering and interactions work correctly.
 
 ### Step 5: Update Progress
 
@@ -97,27 +112,28 @@ If a task cannot be completed, YOU MUST STOP AND ASK FOR HUMAN INTERVENTION:
 ├── GEMINI.md          # This workflow file
 ├── progress.txt       # Progress log
 ├── init.sh            # Initialization script
-└── hello-nextjs/      # Next.js application
-    ├── src/app/       # App Router pages
-    ├── src/components/
-    └── ...
+└── <your-app>/        # Application directory — discovered at runtime
 ```
 
-## Commands
+## Command Discovery
 
-```bash
-# In hello-nextjs/
-npm run dev      # Start dev server
-npm run build    # Production build
-npm run lint     # Run linter
-```
+Commands are derived from project config files found at runtime — no manual configuration required:
+
+| Config file | Commands used |
+|-------------|---------------|
+| `package.json` | `scripts.lint`, `scripts.test`, `scripts.build` |
+| `pyproject.toml` / `setup.py` | `pytest`, `ruff`/`flake8`, `mypy` |
+| `go.mod` | `go vet ./...`, `go test ./...`, `go build ./...` |
+| `Cargo.toml` | `cargo clippy`, `cargo test`, `cargo build` |
+| `Makefile` | `make lint`, `make test`, `make build` |
 
 ## Coding Conventions
 
-- TypeScript strict mode
-- Functional components with hooks
-- Tailwind CSS for styling
-- Write tests for new features
+- Read existing files in the target area **before** writing new code
+- Match the style, naming patterns, and idioms already present in the codebase
+- If a `CONTRIBUTING.md`, `.editorconfig`, or linter config exists, treat it as authoritative
+- Prefer editing existing files over creating new ones when extending functionality
+- Write tests for new behaviour, following whatever test framework is already in use
 
 ---
 

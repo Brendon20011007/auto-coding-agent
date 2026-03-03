@@ -26,17 +26,17 @@ Ensure the dev server is running at `http://localhost:3000`.
 
 ### 3. Implement
 
-- Write clean, idiomatic TypeScript code following existing patterns in `hello-nextjs/src/`.
-- Use functional React components with hooks.
-- Style with Tailwind CSS.
+- Read existing files in the target area **before** writing code — match the style and idioms already present.
+- If a `CONTRIBUTING.md`, `.editorconfig`, or linter config exists, treat it as authoritative.
 - Keep changes focused — one task, one concern.
 
 ### 4. Test
 
-- `npm run lint` — 0 errors.
-- `npm run build` — succeeds.
+- **Lint gate** — run the lint command for this project (e.g. `npm run lint`, `ruff check .`, `go vet ./...`). Zero errors required.
+- **Test gate** — run the test command (e.g. `npm test`, `pytest`, `go test ./...`). All tests must pass.
+- **Build gate** — run the build command if applicable (e.g. `npm run build`, `go build ./...`, `cargo build`). Must succeed.
 - **UI changes**: verify in the browser using Playwright MCP (rendering, clicks, forms).
-- **API changes**: test endpoints with curl or fetch.
+- **API changes**: test endpoints with curl or the appropriate HTTP client.
 
 ### 5. Update Progress
 

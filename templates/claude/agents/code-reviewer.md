@@ -60,7 +60,7 @@ For each changed file, evaluate:
 
 #### Style & Conventions
 - [ ] Follows existing project patterns
-- [ ] Tailwind CSS for styling (no inline styles or CSS modules)
+- [ ] Styling follows project conventions (no unexplained inline styles or framework mismatches)
 - [ ] Consistent naming conventions
 - [ ] Files in correct directories per project structure
 

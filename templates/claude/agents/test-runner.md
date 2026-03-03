@@ -15,8 +15,19 @@ You are a **Test Runner** agent — a quality gatekeeper. Your sole focus is ver
 ### 1. Initialize
 
 ```bash
-cd hello-nextjs
-npm install
+# Detect project directory and navigate into it
+PROJECT_DIR=$(for dir in */; do
+  d="${dir%/}"
+  { [ -f "$d/package.json" ] || [ -f "$d/pyproject.toml" ] || [ -f "$d/go.mod" ] || [ -f "$d/Cargo.toml" ]; } && echo "$d" && break
+done)
+[ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+
+# Install dependencies (stack-appropriate)
+[ -f package.json ]     && npm install
+[ -f requirements.txt ] && pip install -r requirements.txt
+[ -f pyproject.toml ]   && pip install -e .
+[ -f go.mod ]           && go mod download
+[ -f Cargo.toml ]       && cargo fetch
 ```
 
 ### 2. Run All Automated Checks
@@ -24,14 +35,24 @@ npm install
 Execute these in order and report results:
 
 ```bash
-# TypeScript type checking
-npx tsc --noEmit
+# Discover commands from config files, then run the appropriate set:
 
-# Linting
-npm run lint
+# Node/JS/TS
+npm run lint   2>&1 | head -80
+npm test       2>&1 | head -80
+npm run build  2>&1 | head -80
 
-# Production build
-npm run build
+# Python
+ruff check .   2>&1 | head -80
+pytest         2>&1 | head -80
+
+# Go
+go vet ./...   2>&1 | head -80
+go test ./...  2>&1 | head -80
+
+# Rust
+cargo clippy   2>&1 | head -80
+cargo test     2>&1 | head -80
 ```
 
 ### 3. Browser Testing (for UI changes)

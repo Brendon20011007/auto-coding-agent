@@ -2,8 +2,10 @@
 
 ## Project Context
 
-A video processing application with Next.js frontend.
+This workflow is **stack-agnostic** and works with any language or framework.
 Tasks are managed via Notion Database ID: {{DB_ID}}
+
+The agent detects your project type at runtime by scanning config files (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `Makefile`, etc.) to determine install, lint, test, and build commands automatically.
 
 ---
 
@@ -30,17 +32,19 @@ Check the Notion database for tasks with status `To Do`. Work on ONE task at a t
 
 ### 3. Implement
 
-- Follow existing TypeScript/React code patterns in `hello-nextjs/src/`
-- Use Tailwind CSS for styling
+- Scan the project root for config files to understand the stack and conventions
+- Read `CONTRIBUTING.md`, `.editorconfig`, and linter configs before writing code
+- Match existing code style, naming patterns, and idioms
 - Keep changes focused on the task requirements
 
 ### 4. Test
 
-Before marking a task complete:
+Before marking a task complete, run all three quality gates:
 
-- Run `npm run lint` — must pass with 0 errors
-- Run `npm run build` — must succeed
-- For UI changes: verify in the browser that rendering and interactions work correctly
+1. **Lint** — run the lint command for your stack (e.g. `npm run lint`, `ruff check .`, `go vet ./...`). Zero errors required.
+2. **Tests** — run the test command for your stack (e.g. `npm test`, `pytest`, `go test ./...`). All tests must pass.
+3. **Build** — run the build command if applicable (e.g. `npm run build`, `go build ./...`, `cargo build`). Must succeed.
+4. **Browser** (UI projects only) — for major visual changes, verify rendering and interactions in the browser.
 
 ### 5. Update Progress
 
@@ -83,18 +87,21 @@ If a task cannot be completed:
 
 ```
 /
-├── hello-nextjs/        # Next.js app (TypeScript + Tailwind)
-│   ├── src/app/         # App Router pages and API routes
-│   └── src/components/  # Reusable components
 ├── progress.txt         # Session progress log
-└── init.sh              # Environment setup script
+├── init.sh              # Environment setup script
+└── <your-app>/          # Application directory — discovered at runtime
 ```
 
-## Commands
+The application directory is detected automatically from config files. No fixed structure is assumed.
 
-```bash
-cd hello-nextjs
-npm run dev      # Start development server
-npm run build    # Production build check
-npm run lint     # Lint check
-```
+## Command Discovery
+
+Commands are derived from project config files at runtime:
+
+| Config file | Install | Lint | Test | Build |
+|-------------|---------|------|------|-------|
+| `package.json` | `npm install` | see `scripts.lint` | see `scripts.test` | see `scripts.build` |
+| `pyproject.toml` / `setup.py` | `pip install -e .` | `ruff check .` | `pytest` | n/a |
+| `go.mod` | `go mod download` | `go vet ./...` | `go test ./...` | `go build ./...` |
+| `Cargo.toml` | `cargo fetch` | `cargo clippy` | `cargo test` | `cargo build` |
+| `Makefile` | `make install` | `make lint` | `make test` | `make build` |

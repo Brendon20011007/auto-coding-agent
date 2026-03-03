@@ -5,25 +5,86 @@
 const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const RESET = '\x1b[0m';
-const BOLD  = '\x1b[1m';
-const CYAN  = '\x1b[36m';
-const GREEN = '\x1b[32m';
+const RESET  = '\x1b[0m';
+const BOLD   = '\x1b[1m';
+const CYAN   = '\x1b[36m';
+const GREEN  = '\x1b[32m';
 const YELLOW = '\x1b[33m';
-const DIM   = '\x1b[2m';
+const RED    = '\x1b[31m';
+const DIM    = '\x1b[2m';
 
 function print(msg) { process.stdout.write(msg + '\n'); }
-function bold(s)  { return BOLD + s + RESET; }
-function cyan(s)  { return CYAN + s + RESET; }
-function green(s) { return GREEN + s + RESET; }
-function yellow(s){ return YELLOW + s + RESET; }
-function dim(s)   { return DIM + s + RESET; }
+function bold(s)   { return BOLD + s + RESET; }
+function cyan(s)   { return CYAN + s + RESET; }
+function green(s)  { return GREEN + s + RESET; }
+function yellow(s) { return YELLOW + s + RESET; }
+function red(s)    { return RED + s + RESET; }
+function dim(s)    { return DIM + s + RESET; }
 
 function ask(rl, question) {
   return new Promise(resolve => rl.question(question, resolve));
+}
+
+// ─── Validations ─────────────────────────────────────────────────────────────
+
+function verifyNotionDatabase(dbId, token) {
+  return new Promise(resolve => {
+    if (!dbId || !token) {
+      resolve({ ok: false, skipped: true });
+      return;
+    }
+
+    // Strip hyphens — Notion API accepts both formats
+    const cleanId = dbId.replace(/-/g, '');
+    const options = {
+      hostname: 'api.notion.com',
+      path: `/v1/databases/${cleanId}`,
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Notion-Version': '2022-06-28',
+      },
+    };
+
+    const req = https.request(options, res => {
+      resolve({ ok: res.statusCode === 200, status: res.statusCode });
+    });
+    req.on('error', err => resolve({ ok: false, networkError: err.message }));
+    req.setTimeout(8000, () => { req.destroy(); resolve({ ok: false, timeout: true }); });
+    req.end();
+  });
+}
+
+async function verifyObsidianVault(vaultPath, rl) {
+  if (!vaultPath) return { ok: false, skipped: true };
+
+  const vaultExists  = fs.existsSync(vaultPath);
+  const dotObsidian  = vaultExists && fs.existsSync(path.join(vaultPath, '.obsidian'));
+
+  if (vaultExists && dotObsidian) {
+    return { ok: true };
+  }
+
+  if (!vaultExists) {
+    print(yellow(`  ⚠  Vault path does not exist: ${vaultPath}`));
+  } else {
+    print(yellow(`  ⚠  Path exists but is not an Obsidian vault (.obsidian/ folder missing): ${vaultPath}`));
+  }
+
+  const answer = (await ask(rl, yellow('     Create vault directory structure now? [y/N]: '))).trim().toLowerCase();
+  if (answer === 'y' || answer === 'yes') {
+    fs.mkdirSync(path.join(vaultPath, '.obsidian'), { recursive: true });
+    fs.mkdirSync(path.join(vaultPath, 'Architecture'), { recursive: true });
+    fs.mkdirSync(path.join(vaultPath, 'Troubleshooting'), { recursive: true });
+    print(green(`  ✔  Created vault at ${vaultPath}`));
+    return { ok: true, created: true };
+  }
+
+  return { ok: false, declined: true };
 }
 
 function copyFileWithReplacements(src, dest, replacements) {
@@ -109,8 +170,11 @@ function geminiMcpConfig(token) {
 
 // ─── Install functions ───────────────────────────────────────────────────────
 
-function installClaude(dbId, token) {
-  const replacements = { '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]' };
+function installClaude(dbId, token, vaultPath) {
+  const replacements = {
+    '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]',
+    '{{OBSIDIAN_VAULT}}': vaultPath || '[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]',
+  };
 
   copyFileWithReplacements(
     path.join(TEMPLATES_DIR, 'claude', 'CLAUDE.md'),
@@ -121,7 +185,7 @@ function installClaude(dbId, token) {
   const initDest        = path.join(TARGET_DIR, 'init.sh');
   const startWorkDest   = path.join(TARGET_DIR, 'start-work.sh');
   const analyzeArchDest = path.join(TARGET_DIR, 'analyze-arch.sh');
-  copyFile(path.join(TEMPLATES_DIR, 'claude', 'init.sh'),          initDest);
+  copyFileWithReplacements(path.join(TEMPLATES_DIR, 'claude', 'init.sh'),         initDest,        replacements);
   copyFile(path.join(TEMPLATES_DIR, 'claude', 'start-work.sh'),    startWorkDest);
   copyFile(path.join(TEMPLATES_DIR, 'claude', 'analyze-arch.sh'),  analyzeArchDest);
   makeExecutable(initDest);
@@ -155,8 +219,11 @@ function installClaude(dbId, token) {
   }
 }
 
-function installGemini(dbId, token) {
-  const replacements = { '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]' };
+function installGemini(dbId, token, vaultPath) {
+  const replacements = {
+    '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]',
+    '{{OBSIDIAN_VAULT}}': vaultPath || '[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]',
+  };
 
   copyFileWithReplacements(
     path.join(TEMPLATES_DIR, 'gemini', 'GEMINI.md'),
@@ -173,8 +240,11 @@ function installGemini(dbId, token) {
   }
 }
 
-function installCopilot(dbId) {
-  const replacements = { '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]' };
+function installCopilot(dbId, vaultPath) {
+  const replacements = {
+    '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]',
+    '{{OBSIDIAN_VAULT}}': vaultPath || '[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]',
+  };
 
   copyFileWithReplacements(
     path.join(TEMPLATES_DIR, 'copilot', 'copilot-instructions.md'),
@@ -189,7 +259,7 @@ function installCopilot(dbId) {
 async function main() {
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
-  print(bold(cyan('║      create-notion-agent  v1.1.0         ║')));
+  print(bold(cyan('║      create-notion-agent  v1.2.0         ║')));
   print(bold(cyan('║  Notion-powered autonomous agent setup   ║')));
   print(bold(cyan('╚══════════════════════════════════════════╝')));
   print('');
@@ -199,7 +269,7 @@ async function main() {
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-  // ── Step 1: Pick CLI(s) ──
+  // ── Prompt 1: Pick CLI(s) ──
   print(bold('Which AI CLI are you using?'));
   print('  1) Claude Code');
   print('  2) Gemini CLI');
@@ -218,37 +288,87 @@ async function main() {
     targets.add('claude');
   }
 
-  // ── Step 2: Notion Database ID ──
+  // ── Prompt 2: Notion Database ID ──
   print('');
   print(bold('Notion Database ID'));
   print(dim('  Found in your Notion database URL after the workspace name.'));
   print(dim('  Example: notion.so/myworkspace/[DATABASE_ID]?v=...'));
-  print(dim('  Leave blank to fill in CLAUDE.md / GEMINI.md manually later.'));
+  print(dim('  Leave blank to fill in the workflow files manually later.'));
   const dbId = (await ask(rl, yellow('Database ID (or Enter to skip): '))).trim();
 
-  // ── Step 3: Notion API Token ──
+  // ── Prompt 3: Notion API Token ──
   print('');
   print(bold('Notion API Token  (for MCP auto-configuration)'));
   print(dim('  Create one at https://www.notion.so/profile/integrations'));
   print(dim('  Leave blank to configure MCP manually later.'));
   const token = (await ask(rl, yellow('API Token (or Enter to skip): '))).trim();
 
+  // ── Prompt 4: Obsidian Vault Path ──
+  print('');
+  print(bold('Obsidian Vault Path  (knowledge base for the agent)'));
+  print(dim('  Absolute path to your local Obsidian vault directory.'));
+  print(dim('  The agent reads Architecture/ and Troubleshooting/ notes before coding.'));
+  print(dim('  Leave blank to configure manually later.'));
+  const vaultPath = (await ask(rl, yellow('Vault path (or Enter to skip): '))).trim();
+
+  // ── Validations ──
+  print('');
+  print(bold('Verifying configuration...'));
+
+  // Validate Notion database
+  if (dbId && token) {
+    process.stdout.write(`  Checking Notion database... `);
+    const notionResult = await verifyNotionDatabase(dbId, token);
+    if (notionResult.ok) {
+      print(green('✔  Database verified'));
+    } else if (notionResult.timeout) {
+      print(yellow('⚠  Request timed out — check your internet connection'));
+    } else if (notionResult.networkError) {
+      print(yellow(`⚠  Network error: ${notionResult.networkError}`));
+    } else if (notionResult.status === 401) {
+      print(red('✖  Invalid Notion token — MCP won\'t work until fixed'));
+      print(dim('     Tip: ensure your integration has access to the database in Notion'));
+    } else if (notionResult.status === 404) {
+      print(red('✖  Database not found — double-check the Database ID in your Notion URL'));
+      print(dim('     Tip: the ID is the 32-character segment before ?v= in the URL'));
+    } else {
+      print(yellow(`⚠  Unexpected response (HTTP ${notionResult.status}) — continuing anyway`));
+    }
+  } else if (!dbId || !token) {
+    print(dim('  Notion verification skipped (no DB ID or token provided)'));
+  }
+
+  // Validate Obsidian vault
+  if (vaultPath) {
+    process.stdout.write(`  Checking Obsidian vault... `);
+    const obsidianResult = await verifyObsidianVault(vaultPath, rl);
+    if (obsidianResult.ok && !obsidianResult.created) {
+      print(green('✔  Vault verified'));
+    } else if (obsidianResult.skipped) {
+      // no-op
+    } else if (!obsidianResult.ok && obsidianResult.declined) {
+      print(yellow('  ⚠  Vault not created — update OBSIDIAN_VAULT_PATH in init.sh after install'));
+    }
+  } else {
+    print(dim('  Obsidian vault verification skipped (no path provided)'));
+  }
+
   rl.close();
 
-  // ── Step 4: Install ──
+  // ── Install files ──
   print('');
   print(bold('Installing files...'));
 
   try {
-    if (targets.has('claude'))  installClaude(dbId, token);
-    if (targets.has('gemini'))  installGemini(dbId, token);
-    if (targets.has('copilot')) installCopilot(dbId);
+    if (targets.has('claude'))  installClaude(dbId, token, vaultPath);
+    if (targets.has('gemini'))  installGemini(dbId, token, vaultPath);
+    if (targets.has('copilot')) installCopilot(dbId, vaultPath);
   } catch (err) {
-    print('\n\x1b[31mError: ' + err.message + RESET);
+    print('\n' + red('Error: ' + err.message));
     process.exit(1);
   }
 
-  // ── Step 5: Next steps ──
+  // ── Next steps ──
   print('');
   print(bold(green('✅  Done!')));
   print('');
@@ -257,35 +377,38 @@ async function main() {
   if (targets.has('claude')) {
     print('');
     print(bold('  Claude Code:'));
-    if (!dbId) print('  1. Open CLAUDE.md and replace [YOUR_NOTION_DATABASE_ID]');
+    let step = 1;
+    if (!dbId)    print(`  ${step++}. Open CLAUDE.md and replace [YOUR_NOTION_DATABASE_ID]`);
+    if (!vaultPath) print(`  ${step++}. Edit init.sh and set OBSIDIAN_VAULT_PATH to your vault`);
     if (!token) {
-      print(`  ${dbId ? '1' : '2'}. Add the Notion MCP server to Claude Code:`);
-      print(dim('     claude mcp add notion-api -- npx -y @notionhq/notion-mcp-server'));
-      print(dim('     (then set OPENAPI_MCP_HEADERS with your Notion token)'));
+      print(`  ${step++}. Add the Notion MCP server:`);
+      print(dim('       claude mcp add notion-api -- npx -y @notionhq/notion-mcp-server'));
+      print(dim('       Then edit .claude/settings.json and add your token to OPENAPI_MCP_HEADERS'));
     }
-    print(`  ${(!dbId || !token) ? ((!dbId && !token) ? '3' : '2') : '1'}. Run: chmod +x init.sh start-work.sh analyze-arch.sh`);
-    print(dim('     Then: ./start-work.sh'));
-    print(dim('     Or:   ./analyze-arch.sh   (generate architecture.md)'));
+    print(`  ${step++}. Run: chmod +x init.sh start-work.sh analyze-arch.sh && ./init.sh`);
+    print(`  ${step++}. Start the agent: ./start-work.sh`);
+    print(dim('       Or generate architecture docs first: ./analyze-arch.sh'));
   }
 
   if (targets.has('gemini')) {
     print('');
     print(bold('  Gemini CLI:'));
-    if (!dbId) print('  1. Open GEMINI.md and replace [YOUR_NOTION_DATABASE_ID]');
-    if (!token) {
-      print('  Configure Notion MCP in ~/.gemini/settings.json if not done automatically.');
-    }
+    let step = 1;
+    if (!dbId) print(`  ${step++}. Open GEMINI.md and replace [YOUR_NOTION_DATABASE_ID]`);
+    if (!token) print(`  ${step++}. Add Notion MCP to ~/.gemini/settings.json (see README for snippet)`);
+    print(`  ${step++}. Run: ./init.sh  (sets up dependencies and Obsidian vault dirs)`);
+    print(`  ${step++}. Start Gemini CLI in your project directory and it will follow GEMINI.md`);
   }
 
   if (targets.has('copilot')) {
     print('');
     print(bold('  GitHub Copilot:'));
-    print('  The workflow instructions are in .github/copilot-instructions.md');
-    print(dim('  Copilot will automatically use these as workspace instructions.'));
+    print('  1. Copilot reads .github/copilot-instructions.md automatically as workspace instructions');
+    if (!dbId) print('  2. Open .github/copilot-instructions.md and replace [YOUR_NOTION_DATABASE_ID]');
   }
 
   print('');
-  print(dim('Docs: https://github.com/Brendon20011007/auto-coding-agent'));
+  print(dim('Docs: https://github.com/SamuelQZQ/auto-coding-agent-demo'));
   print('');
 }
 

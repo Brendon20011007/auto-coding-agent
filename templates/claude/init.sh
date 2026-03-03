@@ -2,35 +2,80 @@
 
 echo "🔄 Initializing environment..."
 
-cd hello-nextjs || { echo "Directory hello-nextjs not found! Exiting."; exit 1; }
+# ─── Project Detection ───────────────────────────────────────────────────────
+# Find the app directory: look for a recognised config file in subdirectories,
+# or fall back to the current directory if config is at the root.
 
-echo "📦 Checking and installing dependencies..."
-npm install
+detect_project_dir() {
+  # Check subdirectories first (one level deep), then root
+  for dir in */ .; do
+    dir="${dir%/}"
+    if [ -f "$dir/package.json" ] || \
+       [ -f "$dir/pyproject.toml" ] || \
+       [ -f "$dir/setup.py" ] || \
+       [ -f "$dir/requirements.txt" ] || \
+       [ -f "$dir/go.mod" ] || \
+       [ -f "$dir/Cargo.toml" ] || \
+       [ -f "$dir/Makefile" ]; then
+      echo "$dir"
+      return
+    fi
+  done
+  echo "."
+}
 
-if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "✅ Development server is already running on port 3000."
-else
-    echo "🚀 Starting development server in the background..."
-    npm run dev > dev.log 2>&1 &
-    sleep 5
-    echo "✅ Development server started."
-fi
+PROJECT_DIR=$(detect_project_dir)
+echo "📁 Project directory detected: $PROJECT_DIR"
+cd "$PROJECT_DIR" || { echo "❌ Cannot enter project directory: $PROJECT_DIR"; exit 1; }
 
-# --- Obsidian Vault Setup ---
+# ─── Install Dependencies ─────────────────────────────────────────────────────
+
+install_dependencies() {
+  if [ -f "package.json" ]; then
+    echo "📦 Node.js project — installing dependencies..."
+    npm install
+  elif [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+    echo "📦 Python project — installing dependencies..."
+    if [ -f "pyproject.toml" ]; then
+      pip install -e . --quiet
+    else
+      pip install -r requirements.txt --quiet 2>/dev/null || pip install -e . --quiet
+    fi
+  elif [ -f "requirements.txt" ]; then
+    echo "📦 Python project — installing from requirements.txt..."
+    pip install -r requirements.txt --quiet
+  elif [ -f "go.mod" ]; then
+    echo "📦 Go project — downloading modules..."
+    go mod download
+  elif [ -f "Cargo.toml" ]; then
+    echo "📦 Rust project — fetching crates..."
+    cargo fetch
+  elif [ -f "Makefile" ] && grep -q "^install:" Makefile 2>/dev/null; then
+    echo "📦 Makefile project — running make install..."
+    make install
+  else
+    echo "ℹ️  No recognised dependency manifest found — skipping install step."
+  fi
+  echo "✅ Dependencies ready."
+}
+
+install_dependencies
+
+# ─── Obsidian Vault Setup ─────────────────────────────────────────────────────
 OBSIDIAN_VAULT_PATH="{{OBSIDIAN_VAULT}}"
 
-if [ -n "$OBSIDIAN_VAULT_PATH" ] && [ "$OBSIDIAN_VAULT_PATH" != "{{OBSIDIAN_VAULT}}" ]; then
+if [ -n "$OBSIDIAN_VAULT_PATH" ] && [ "$OBSIDIAN_VAULT_PATH" != "[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]" ]; then
     if [ -d "$OBSIDIAN_VAULT_PATH" ]; then
         echo "📚 Setting up Obsidian vault structure..."
         mkdir -p "$OBSIDIAN_VAULT_PATH/Architecture"
         mkdir -p "$OBSIDIAN_VAULT_PATH/Troubleshooting"
-        echo "✅ Obsidian vault directories ready."
+        echo "✅ Obsidian vault directories ready: $OBSIDIAN_VAULT_PATH"
     else
         echo "⚠️  Obsidian vault path not found: $OBSIDIAN_VAULT_PATH"
-        echo "   Create the directory or update OBSIDIAN_VAULT_PATH in init.sh."
+        echo "   Open Obsidian and create a vault at that path, or update OBSIDIAN_VAULT_PATH above."
     fi
 else
-    echo "ℹ️  Obsidian vault path not configured. Edit OBSIDIAN_VAULT_PATH in init.sh to enable."
+    echo "ℹ️  Obsidian vault path not configured. Edit OBSIDIAN_VAULT_PATH in this file to enable."
 fi
 
 echo "✅ Environment initialization complete."

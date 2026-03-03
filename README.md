@@ -40,7 +40,7 @@ You will be prompted for:
 | **Which AI CLI?** | Claude Code / Gemini CLI / GitHub Copilot / All three |
 | **Notion Database ID** | From your Notion database URL (can be filled in later) |
 | **Notion API Token** | From [notion.so/profile/integrations](https://www.notion.so/profile/integrations) — used to auto-configure the MCP server (optional) |
-| **Obsidian Vault Path** | Absolute path to your local Obsidian vault (optional — skip to fill in `CLAUDE.md` and `init.sh` manually later) |
+| **Obsidian Vault Path** | Absolute path to your local Obsidian vault — the installer verifies the path is a real vault (has `.obsidian/` folder) and offers to create it if not |
 
 ### 2. Make scripts executable
 
@@ -152,15 +152,16 @@ your-project/
 
 **`CLAUDE.md`** contains the full SOP the agent follows:
 1. Run `init.sh` to set up the environment + create Obsidian vault directories
-2. Query Notion for the first `To Do` task → set to `In Progress`
-3. Search Obsidian vault (`Architecture/` + `Troubleshooting/`) for relevant context
-4. Implement the task following conventions and Obsidian learnings
-5. Run `npm run lint` and `npm run build` (zero errors required)
-6. Test UI changes in the browser via Playwright MCP
-7. Write a post-mortem to Obsidian `Troubleshooting/` if bugs were encountered (filesystem tools only — never `obsidian` CLI)
-8. Append a summary to `progress.txt`
-9. Update Notion status to `Done` + write `Agent Report`
-10. Commit everything in one atomic commit
+2. **Scan the project** for config files (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `Makefile`, etc.) to auto-detect the stack and derive lint / test / build commands
+3. Query Notion for the first `To Do` task → set to `In Progress`
+4. Search Obsidian vault (`Architecture/` + `Troubleshooting/`) for relevant context
+5. Implement the task following conventions and Obsidian learnings
+6. Run the **lint gate**, **test gate**, and **build gate** (all auto-detected — zero errors required)
+7. Test UI changes in the browser via Playwright MCP (UI projects only)
+8. Write a post-mortem to Obsidian `Troubleshooting/` if bugs were encountered (filesystem tools only — never `obsidian` CLI)
+9. Append a summary to `progress.txt`
+10. Update Notion status to `Done` + write `Agent Report`
+11. Commit everything in one atomic commit
 
 **`start-work.sh`** invokes Claude with `--dangerously-skip-permissions` so the agent runs fully autonomously.
 
@@ -293,8 +294,9 @@ Every agent session follows this exact sequence:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Step 1  Initialize                                          │
-│         Run ./init.sh → install deps → start dev server     │
+│ Step 1  Initialize & Scan Project                           │
+│         Run ./init.sh → auto-install deps                   │
+│         Scan config files → detect stack + commands         │
 │         Create Obsidian Architecture/ + Troubleshooting/    │
 └────────────────────┬────────────────────────────────────────┘
                      │
@@ -313,9 +315,10 @@ Every agent session follows this exact sequence:
 ┌────────────────────▼────────────────────────────────────────┐
 │ Step 4  Implement & Test (MANDATORY)                        │
 │         Write code → follow conventions + Obsidian notes    │
-│         npm run lint  → 0 errors                            │
-│         npm run build → must succeed                        │
-│         Browser test  → for UI changes (Playwright MCP)     │
+│         Lint gate   → 0 errors  (auto-detected command)      │
+│         Test gate   → all pass  (auto-detected command)      │
+│         Build gate  → succeeds  (auto-detected command)      │
+│         Browser test → UI changes only (Playwright MCP)     │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
@@ -374,8 +377,12 @@ The `obsidian` CLI tool triggers GUI pop-ups and silently fails in headless/auto
 
 ### Setting It Up
 
-During `npx create-notion-agent`, provide the absolute path to your vault when prompted. You can also edit it manually afterward:
+During `npx create-notion-agent`, provide the absolute path to your vault when prompted. The installer will:
+- Verify the path contains a `.obsidian/` folder (confirming it is a real vault)
+- Offer to create the directory structure if the vault doesn't exist yet
+- Inject the path into `CLAUDE.md` and `init.sh` automatically
 
+To update the path manually afterward:
 - In `CLAUDE.md`: replace `[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]`
 - In `init.sh`: update the `OBSIDIAN_VAULT_PATH=` variable
 
@@ -406,8 +413,8 @@ After installation, edit the files directly to adapt the workflow to your projec
 
 | File | What to customize |
 |------|-------------------|
-| `CLAUDE.md` / `GEMINI.md` | Add project-specific conventions, tech stack details, test commands; replace `[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]` |
-| `init.sh` | Change the port, add env var checks, seed a database; update `OBSIDIAN_VAULT_PATH` |
+| `CLAUDE.md` / `GEMINI.md` | Add project-specific conventions or override commands; Obsidian vault path is auto-injected during install |
+| `init.sh` | Add env var checks, database seed commands, or update `OBSIDIAN_VAULT_PATH` |
 | `start-work.sh` | Adjust the system prompt passed to the agent |
 | `analyze-arch.sh` | Extend the architecture prompt, add custom sections |
 | `.claude/settings.json` | Add additional MCP servers (Playwright, GitHub, etc.) |
@@ -460,8 +467,8 @@ your-project/
 **Q: Does the agent commit code automatically?**
 Yes. `start-work.sh` runs Claude with `--dangerously-skip-permissions`, which means it executes `git commit` without asking for confirmation. Review `progress.txt` and git log after each session.
 
-**Q: Can I use this without a Next.js project?**
-Yes. The workflow files are framework-agnostic. Edit `CLAUDE.md` to replace the Next.js-specific test commands (`npm run lint`, `npm run build`) with whatever your project uses.
+**Q: Can I use this with any language or stack?**
+Yes. The workflow is fully stack-agnostic. After installation, `init.sh` auto-detects your project type by scanning for `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, or `Makefile`. The agent derives lint, test, and build commands from those files at runtime — no manual configuration needed.
 
 **Q: What if I don't have a Notion token yet?**
 Skip it during installation. The workflow files are still copied with a `[YOUR_NOTION_DATABASE_ID]` placeholder. Add the MCP config manually later using the snippets in the MCP section above.

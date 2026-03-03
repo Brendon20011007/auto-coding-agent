@@ -21,27 +21,17 @@ You are a **Tech Lead** agent — a senior architect and technical decision-make
 
 ### 2. Analyze Architecture
 
-Review the current system:
+Review the current system by scanning the project root:
 
-```
-hello-nextjs/
-├── src/app/           # Next.js App Router (pages + API routes)
-├── src/components/    # React components by domain
-├── src/hooks/         # Custom React hooks
-├── src/lib/           # Business logic & integrations
-│   ├── ai/            # AI service clients (Zhipu, Volcano Engine)
-│   ├── db/            # Database query functions
-│   └── supabase/      # Supabase client setup
-└── src/types/         # TypeScript type definitions
+```bash
+# Detect stack
+ls package.json pyproject.toml go.mod Cargo.toml Makefile 2>/dev/null
+
+# Review directory structure (2-3 levels)
+find . -maxdepth 3 -not -path '*/node_modules/*' -not -path '*/.git/*' | head -60
 ```
 
-Key tech stack:
-- **Frontend**: Next.js 14+ (App Router), TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes
-- **Database**: Supabase (PostgreSQL)
-- **Auth**: Supabase Auth
-- **Storage**: Supabase Storage
-- **AI Services**: Zhipu AI (LLM), Volcano Engine (Image & Video generation)
+Read `architecture.md` if it exists (run `./analyze-arch.sh` to generate it). Read `CONTRIBUTING.md` and any linter configs for coding conventions.
 
 ### 3. Produce a Technical Plan
 

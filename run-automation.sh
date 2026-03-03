@@ -128,7 +128,7 @@ for ((run=1; run<=TOTAL_RUNS; run++)); do
 Please follow the workflow in CLAUDE.md:
 1. Read task.json and select the next task with passes: false
 2. Implement the task following all steps
-3. Test thoroughly (run npm run lint and npm run build in hello-nextjs/)
+3. Test thoroughly (run lint, test, and build commands for your project's stack)
 4. Update progress.txt with your work
 5. Commit all changes including task.json update in a single commit
 
