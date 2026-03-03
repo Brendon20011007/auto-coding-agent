@@ -1304,3 +1304,23 @@ Task 4 (用户认证 - 登录页面) 被错误地标记为完成，原因：
 ### Notes:
 - [any relevant notes, decisions, or gotchas for future agents]
 ```
+
+## 2025-01-27 - Full Stack-Agnostic Refactor + CLI v1.2.0
+
+### What was done:
+- **bin/cli.js**: Added 4th prompt for Obsidian vault path, `verifyNotionDatabase()` (Notion API live check), `verifyObsidianVault()` (filesystem .obsidian/ check), injected `{{OBSIDIAN_VAULT}}` into all 3 install functions. Bumped to v1.2.0.
+- **templates/claude/CLAUDE.md** + root **CLAUDE.md**: Removed all video-processing/Next.js/TypeScript context. Added Command Discovery table (package.json/pyproject.toml/go.mod/Cargo.toml/Makefile), generic 4-gate testing (Lint/Test/Build/Browser), generic Project Structure, generic Coding Conventions.
+- **templates/claude/init.sh** + root **init.sh**: Replaced hardcoded `cd hello-nextjs && npm install` with `detect_project_dir()` function + stack-aware install block.
+- **templates/gemini/GEMINI.md**: Same stack-agnostic rewrites.
+- **templates/copilot/copilot-instructions.md**: Same stack-agnostic rewrites.
+- **README.md**: Updated Quick Start prompts table, workflow diagram, SOP steps, Obsidian section, Customizing table, FAQ.
+- **All 6 agent templates** (templates/claude/agents/ + .claude/agents/): Removed hello-nextjs, TypeScript, Tailwind, Supabase, Next.js App Router references. Generic stack detection, generic testing gates, generic debugging strategies.
+- **run-automation.sh**: Updated task prompt (line 131) to generic stack wording.
+
+### Testing:
+- grep_search for `hello-nextjs` confirmed 0 remaining matches in workflow files (only in progress.txt history, hello-nextjs/ app, and .npmignore — all correct).
+- grep_search for TypeScript/Tailwind/Supabase/Zhipu/Volcano references confirmed 0 in any template or agent file.
+
+### Notes:
+- `verifyNotionDatabase` and `verifyObsidianVault` are both non-blocking — warnings are shown but install proceeds regardless.
+- `rl.close()` was intentionally moved to AFTER both validations so `verifyObsidianVault` can still prompt the user to create missing vault directories.
