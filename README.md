@@ -15,6 +15,10 @@ npx create-notion-agent
 ```
 Your Notion Database  →  AI Agent  →  Code committed to Git
      (task queue)         (Claude / Gemini / Copilot)
+          +
+   Obsidian Vault
+ (architecture rules
+  & bug learnings)
 ```
 
 The workflow was built and validated over a 10-hour unattended coding session that produced a full-stack Next.js application with Supabase, AI image generation, and video generation — with every single commit authored by the agent.
@@ -36,6 +40,7 @@ You will be prompted for:
 | **Which AI CLI?** | Claude Code / Gemini CLI / GitHub Copilot / All three |
 | **Notion Database ID** | From your Notion database URL (can be filled in later) |
 | **Notion API Token** | From [notion.so/profile/integrations](https://www.notion.so/profile/integrations) — used to auto-configure the MCP server (optional) |
+| **Obsidian Vault Path** | Absolute path to your local Obsidian vault (optional — skip to fill in `CLAUDE.md` and `init.sh` manually later) |
 
 ### 2. Make scripts executable
 
@@ -146,14 +151,16 @@ your-project/
 ```
 
 **`CLAUDE.md`** contains the full SOP the agent follows:
-1. Run `init.sh` to set up the environment
+1. Run `init.sh` to set up the environment + create Obsidian vault directories
 2. Query Notion for the first `To Do` task → set to `In Progress`
-3. Implement the task following existing code conventions
-4. Run `npm run lint` and `npm run build` (zero errors required)
-5. Test UI changes in the browser via Playwright MCP
-6. Append a summary to `progress.txt`
-7. Update Notion status to `Done` + write `Agent Report`
-8. Commit everything in one atomic commit
+3. Search Obsidian vault (`Architecture/` + `Troubleshooting/`) for relevant context
+4. Implement the task following conventions and Obsidian learnings
+5. Run `npm run lint` and `npm run build` (zero errors required)
+6. Test UI changes in the browser via Playwright MCP
+7. Write a post-mortem to Obsidian `Troubleshooting/` if bugs were encountered (filesystem tools only — never `obsidian` CLI)
+8. Append a summary to `progress.txt`
+9. Update Notion status to `Done` + write `Agent Report`
+10. Commit everything in one atomic commit
 
 **`start-work.sh`** invokes Claude with `--dangerously-skip-permissions` so the agent runs fully autonomously.
 
@@ -288,6 +295,7 @@ Every agent session follows this exact sequence:
 ┌─────────────────────────────────────────────────────────────┐
 │ Step 1  Initialize                                          │
 │         Run ./init.sh → install deps → start dev server     │
+│         Create Obsidian Architecture/ + Troubleshooting/    │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
@@ -297,19 +305,23 @@ Every agent session follows this exact sequence:
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
-│ Step 3  Implement                                           │
-│         Read Description → write code → follow conventions  │
+│ Step 3  Knowledge Retrieval (Obsidian RAG)                  │
+│         Read Architecture/ for design rules                 │
+│         Read Troubleshooting/ for past bug learnings        │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
-│ Step 4  Test (MANDATORY)                                    │
+│ Step 4  Implement & Test (MANDATORY)                        │
+│         Write code → follow conventions + Obsidian notes    │
 │         npm run lint  → 0 errors                            │
 │         npm run build → must succeed                        │
 │         Browser test  → for UI changes (Playwright MCP)     │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
-│ Step 5  Document                                            │
+│ Step 5  Document Post-Mortem (Obsidian) + Progress          │
+│         If bugs: write Troubleshooting/YYYY-MM-DD-[Task].md │
+│         (filesystem tools only — NEVER `obsidian` CLI)      │
 │         Append summary to progress.txt                      │
 └────────────────────┬────────────────────────────────────────┘
                      │
@@ -330,6 +342,42 @@ If the agent hits an unrecoverable error (missing env vars, external service dow
 4. **Stops without committing**
 
 This prevents broken code from being committed and makes failures visible in your Notion board.
+
+---
+
+## Obsidian Integration (Knowledge Base)
+
+The workflow uses a local Obsidian vault as the agent's long-term memory. The agent reads from it before implementing and writes post-mortems back to it after completing tasks that involved bugs or unexpected complexity.
+
+### Expected Vault Structure
+
+```
+YourVault/
+├── Architecture/          ← Design rules, tech decisions, API patterns
+│   └── *.md
+└── Troubleshooting/       ← Post-mortems written by the agent after bugs
+    └── YYYY-MM-DD-*.md
+```
+
+`init.sh` creates these directories automatically on every run (via `mkdir -p` — safe to run repeatedly).
+
+### How the Agent Uses It
+
+| When | Action |
+|------|--------|
+| Before writing any code | Reads `Architecture/` and `Troubleshooting/` for the current task's feature area |
+| After encountering a bug | Writes a post-mortem to `Troubleshooting/YYYY-MM-DD-[Task-Name].md` |
+
+### Important: Never Use the `obsidian` CLI
+
+The `obsidian` CLI tool triggers GUI pop-ups and silently fails in headless/automated environments. The agent **always** writes Obsidian files using standard filesystem tools (native file writing), never the `obsidian` CLI.
+
+### Setting It Up
+
+During `npx create-notion-agent`, provide the absolute path to your vault when prompted. You can also edit it manually afterward:
+
+- In `CLAUDE.md`: replace `[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]`
+- In `init.sh`: update the `OBSIDIAN_VAULT_PATH=` variable
 
 ---
 
@@ -358,8 +406,8 @@ After installation, edit the files directly to adapt the workflow to your projec
 
 | File | What to customize |
 |------|-------------------|
-| `CLAUDE.md` / `GEMINI.md` | Add project-specific conventions, tech stack details, test commands |
-| `init.sh` | Change the port, add env var checks, seed a database |
+| `CLAUDE.md` / `GEMINI.md` | Add project-specific conventions, tech stack details, test commands; replace `[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]` |
+| `init.sh` | Change the port, add env var checks, seed a database; update `OBSIDIAN_VAULT_PATH` |
 | `start-work.sh` | Adjust the system prompt passed to the agent |
 | `analyze-arch.sh` | Extend the architecture prompt, add custom sections |
 | `.claude/settings.json` | Add additional MCP servers (Playwright, GitHub, etc.) |

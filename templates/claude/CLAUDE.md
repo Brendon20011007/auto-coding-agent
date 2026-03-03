@@ -1,14 +1,32 @@
+# Role & Architecture Context
+
+## Agent Identity
+
+This agent operates a **dual-system architecture**:
+
+| System | Role | Tool |
+|--------|------|------|
+| **The PM** (Task Management) | Notion Database | Notion MCP (`notion_query_database`, `notion_update_page`) |
+| **The Brain** (Knowledge Base) | Local Obsidian Vault | Standard filesystem reads/writes |
+
+Use Notion **strictly** for fetching tasks and updating their status. Use the Obsidian vault for reading architecture guidelines and past troubleshooting learnings before writing code, and for writing post-mortems after fixing bugs.
+
+## Environment Variables
+
+| Variable | Value |
+|----------|-------|
+| **Notion Database ID** | {{DB_ID}} |
+| **Obsidian Vault Path** | {{OBSIDIAN_VAULT}} |
+| Task Statuses | `To Do`, `In Progress`, `Done`, `Blocked` |
+| Target Properties | `Task Name`, `Status`, `Description`, `Agent Report` |
+
+---
+
 # Project Context
 
-A video processing application with Next.js frontend.
+A [your project type] application.
 
 > Note: Detailed project requirements are managed dynamically via a Notion Database.
-
-## Notion Integration Context
-
-- **Target Database ID**: {{DB_ID}}
-- **Task Statuses**: `To Do`, `In Progress`, `Done`, `Blocked`
-- **Target Properties**: `Task Name`, `Status`, `Description`, `Agent Report`
 
 ---
 
@@ -20,9 +38,9 @@ Every new agent session MUST follow this workflow strictly in order:
 
 Run `./init.sh`
 
-This will install dependencies. Make sure the development server (`http://localhost:3000`) is running. DO NOT skip this step.
+This will install dependencies, start the development server (`http://localhost:3000`), and ensure the Obsidian vault directory structure exists. DO NOT skip this step.
 
-### Step 2: Fetch Next Task from Notion
+### Step 2: Fetch Task from Notion
 
 1. Use the Notion MCP tool `notion_query_database` to query the Target Database.
 2. Filter the query strictly for items where `Status` is `To Do`.
@@ -30,15 +48,23 @@ This will install dependencies. Make sure the development server (`http://localh
 4. IMMEDIATELY use `notion_update_page` to change the selected task's `Status` to `In Progress`.
 5. Read the `Description` property carefully to understand the requirement.
 
-### Step 3: Implement the Task
+### Step 3: Knowledge Retrieval (Obsidian RAG)
 
+**Before writing any code**, search the Obsidian vault for relevant context:
+
+1. Search `{{OBSIDIAN_VAULT}}/Architecture/` for design rules and conventions related to the current task's feature area.
+2. Search `{{OBSIDIAN_VAULT}}/Troubleshooting/` for past bug reports related to the same feature or component.
+3. Read any relevant files found and apply those learnings to your implementation plan.
+
+If the vault path is not configured or no relevant files exist, continue to Step 4.
+
+### Step 4: Implement & Test
+
+**Implementation:**
 - Implement the functionality to satisfy all requirements in the Notion task description.
-- Follow existing code patterns and conventions.
+- Follow existing code patterns, conventions, and any Architecture notes retrieved in Step 3.
 
-### Step 4: Test Thoroughly (MANDATORY)
-
-After implementation, verify ALL steps:
-
+**Testing (MANDATORY — all checks must pass):**
 - **Major UI Changes**: MUST be tested in the browser using the MCP Playwright tool. Verify rendering, clicks, and form submissions.
 - **Minor Changes**: Validate via unit tests or lint/build.
 - **Strict Checks**:
@@ -46,9 +72,34 @@ After implementation, verify ALL steps:
   - `npm run build` succeeds.
   - No TypeScript errors.
 
-### Step 5: Update Progress
+### Step 5: Document Post-Mortem (Obsidian) & Update Progress
 
-Append to `progress.txt`:
+**Obsidian Post-Mortem** (only if bugs or non-obvious design decisions were encountered):
+
+> **CRITICAL:** Do NOT use the `obsidian` CLI command. It has known GUI pop-up bugs and silent failures in headless environments. Use standard filesystem file-writing tools only.
+
+Write to: `{{OBSIDIAN_VAULT}}/Troubleshooting/YYYY-MM-DD-[Task-Name].md`
+
+```markdown
+# [Task Name] — Post-Mortem
+Date: YYYY-MM-DD
+
+## Context
+[Brief description of the task]
+
+## The Bug / Issue
+[What went wrong or was unexpectedly complex]
+
+## The Fix
+[How it was resolved]
+
+## Lessons Learned
+[Guidelines for future agents to avoid this issue]
+```
+
+If the task completed cleanly with no bugs, skip the Obsidian write.
+
+**Progress Log** — always append to `progress.txt`:
 
 ```
 ## [Date] - Task: [Notion Task Name]
@@ -98,16 +149,15 @@ If a task cannot be completed, YOU MUST STOP AND ASK FOR HUMAN INTERVENTION:
 ├── start-work.sh      # Trigger script
 ├── progress.txt       # Progress log
 ├── init.sh            # Initialization script
-└── hello-nextjs/      # Next.js application
-    ├── src/app/       # App Router pages
-    ├── src/components/
+└── [your-app]/        # Your application
+    ├── src/
     └── ...
 ```
 
 ## Commands
 
 ```bash
-# In hello-nextjs/
+# Adjust these for your project
 npm run dev      # Start dev server
 npm run build    # Production build
 npm run lint     # Run linter
@@ -125,9 +175,12 @@ npm run lint     # Run linter
 ## Key Rules
 
 1. **One task per session** — Fetch one `To Do` task from Notion and complete it fully.
-2. **Test before marking complete** — All steps must pass before updating Notion to `Done`.
-3. **Browser testing for UI changes** — Major page changes require Playwright browser verification.
-4. **Document in progress.txt** — Append a summary after each task.
-5. **One commit per task** — Code + progress.txt in a single commit.
-6. **Never skip Notion updates** — Status transitions (`To Do` → `In Progress` → `Done`/`Blocked`) are mandatory.
-7. **Stop if blocked** — Do not commit; update Notion to `Blocked` and output blocking info.
+2. **Knowledge first** — Always search Obsidian (Architecture/ + Troubleshooting/) before writing code.
+3. **Test before marking complete** — All checks must pass before updating Notion to `Done`.
+4. **Browser testing for UI changes** — Major page changes require Playwright browser verification.
+5. **Document bugs in Obsidian** — Any bug or design surprise gets a post-mortem in `Troubleshooting/`.
+6. **Never use `obsidian` CLI** — Write Obsidian files with native filesystem tools only.
+7. **Document in progress.txt** — Append a summary after each task.
+8. **One commit per task** — Code + progress.txt in a single commit.
+9. **Never skip Notion updates** — Status transitions (`To Do` → `In Progress` → `Done`/`Blocked`) are mandatory.
+10. **Stop if blocked** — Do not commit; update Notion to `Blocked` and output blocking info.
