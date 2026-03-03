@@ -118,16 +118,35 @@ function installClaude(dbId, token) {
     replacements
   );
 
-  const initDest       = path.join(TARGET_DIR, 'init.sh');
-  const startWorkDest  = path.join(TARGET_DIR, 'start-work.sh');
-  copyFile(path.join(TEMPLATES_DIR, 'claude', 'init.sh'),       initDest);
-  copyFile(path.join(TEMPLATES_DIR, 'claude', 'start-work.sh'), startWorkDest);
+  const initDest        = path.join(TARGET_DIR, 'init.sh');
+  const startWorkDest   = path.join(TARGET_DIR, 'start-work.sh');
+  const analyzeArchDest = path.join(TARGET_DIR, 'analyze-arch.sh');
+  copyFile(path.join(TEMPLATES_DIR, 'claude', 'init.sh'),          initDest);
+  copyFile(path.join(TEMPLATES_DIR, 'claude', 'start-work.sh'),    startWorkDest);
+  copyFile(path.join(TEMPLATES_DIR, 'claude', 'analyze-arch.sh'),  analyzeArchDest);
   makeExecutable(initDest);
   makeExecutable(startWorkDest);
+  makeExecutable(analyzeArchDest);
 
   print(green('  ✔ CLAUDE.md'));
   print(green('  ✔ init.sh'));
   print(green('  ✔ start-work.sh'));
+  print(green('  ✔ analyze-arch.sh'));
+
+  // Install agent definitions
+  const agentsTemplateDir = path.join(TEMPLATES_DIR, 'claude', 'agents');
+  const agentsTargetDir   = path.join(TARGET_DIR, '.claude', 'agents');
+  if (fs.existsSync(agentsTemplateDir)) {
+    const agentFiles = fs.readdirSync(agentsTemplateDir).filter(f => f.endsWith('.md'));
+    for (const file of agentFiles) {
+      copyFile(
+        path.join(agentsTemplateDir, file),
+        path.join(agentsTargetDir, file)
+      );
+      const name = path.basename(file, '.md');
+      print(green(`  ✔ .claude/agents/${file}  (${name} agent)`));
+    }
+  }
 
   if (token) {
     const settingsPath = path.join(TARGET_DIR, '.claude', 'settings.json');
@@ -170,7 +189,7 @@ function installCopilot(dbId) {
 async function main() {
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
-  print(bold(cyan('║      create-notion-agent  v1.0.0         ║')));
+  print(bold(cyan('║      create-notion-agent  v1.1.0         ║')));
   print(bold(cyan('║  Notion-powered autonomous agent setup   ║')));
   print(bold(cyan('╚══════════════════════════════════════════╝')));
   print('');
@@ -244,8 +263,9 @@ async function main() {
       print(dim('     claude mcp add notion-api -- npx -y @notionhq/notion-mcp-server'));
       print(dim('     (then set OPENAPI_MCP_HEADERS with your Notion token)'));
     }
-    print(`  ${(!dbId || !token) ? ((!dbId && !token) ? '3' : '2') : '1'}. Run: chmod +x init.sh start-work.sh`);
+    print(`  ${(!dbId || !token) ? ((!dbId && !token) ? '3' : '2') : '1'}. Run: chmod +x init.sh start-work.sh analyze-arch.sh`);
     print(dim('     Then: ./start-work.sh'));
+    print(dim('     Or:   ./analyze-arch.sh   (generate architecture.md)'));
   }
 
   if (targets.has('gemini')) {

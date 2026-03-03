@@ -99,6 +99,31 @@ Copy the `DATABASE_ID` segment (32-character UUID).
 
 ---
 
+## Architecture Review (`analyze-arch.sh`)
+
+After installing with Claude Code selected, you will have an `analyze-arch.sh` script in your project root. Run it any time to generate a comprehensive `architecture.md`:
+
+```bash
+./analyze-arch.sh
+```
+
+Claude Code scans the entire project and writes `architecture.md` with these six sections:
+
+| Section | What's documented |
+|---------|-------------------|
+| **Tech Stack & Dependencies** | Core technologies, key libraries, versions |
+| **Directory & File Structure** | Annotated directory tree (2–3 levels deep) |
+| **Data Models & DB Schema** | Tables, columns, types, constraints, enums |
+| **API Routes & Endpoints** | Every HTTP endpoint with method, path, and description |
+| **Key Components & Flows** | End-to-end user flows and important reusable modules |
+| **Environment Variables** | Every env var name and description (no values) |
+
+If `architecture.md` already exists it is overwritten. Re-run the script after major refactors or when onboarding new contributors.
+
+> **Requirements:** Claude Code must be installed and authenticated. The script uses `--dangerously-skip-permissions` so Claude can read all files and write `architecture.md` without interactive prompts.
+
+---
+
 ## What Gets Installed
 
 ### Claude Code
@@ -108,8 +133,16 @@ your-project/
 ├── CLAUDE.md           ← Agent workflow instructions
 ├── init.sh             ← Install deps + start dev server
 ├── start-work.sh       ← Launch Claude Code in autonomous mode
+├── analyze-arch.sh     ← Scan project and write architecture.md
 └── .claude/
-    └── settings.json   ← Notion MCP server config (if token provided)
+    ├── settings.json   ← Notion MCP server config (if token provided)
+    └── agents/         ← Specialized agent roles (see below)
+        ├── task-runner.md
+        ├── test-runner.md
+        ├── code-reviewer.md
+        ├── tech-lead.md
+        ├── bug-fixer.md
+        └── cloud-devops-engineer.md
 ```
 
 **`CLAUDE.md`** contains the full SOP the agent follows:
@@ -123,6 +156,56 @@ your-project/
 8. Commit everything in one atomic commit
 
 **`start-work.sh`** invokes Claude with `--dangerously-skip-permissions` so the agent runs fully autonomously.
+
+**`analyze-arch.sh`** invokes Claude Code in non-interactive mode with a structured prompt that scans the entire codebase and writes (or overwrites) `architecture.md` in the project root. See [Architecture Review](#architecture-review-analyze-archsh) for details.
+
+### Claude Code Agents
+
+The installer includes **6 specialized agent roles** in `.claude/agents/`. Each agent has a focused responsibility and can be invoked from Claude Code using the `/agents` command.
+
+| Agent | File | Description |
+|-------|------|-------------|
+| **task-runner** | [task-runner.md](.claude/agents/task-runner.md) | Fetches Notion tasks, implements features, tests, and commits |
+| **test-runner** | [test-runner.md](.claude/agents/test-runner.md) | Runs lint/build/type checks + browser testing; read-only |
+| **code-reviewer** | [code-reviewer.md](.claude/agents/code-reviewer.md) | Reviews code quality with structured checklist; read-only |
+| **tech-lead** | [tech-lead.md](.claude/agents/tech-lead.md) | Plans architecture, breaks down tasks, makes design decisions |
+| **bug-fixer** | [bug-fixer.md](.claude/agents/bug-fixer.md) | Diagnoses issues systematically, applies minimal fixes |
+| **cloud-devops-engineer** | [cloud-devops-engineer.md](.claude/agents/cloud-devops-engineer.md) | Manages Supabase, migrations, env vars, CI/CD, Docker, monitoring, and deployment |
+
+#### When to Use Each Agent
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Planning Phase                                                     │
+│  ├── tech-lead        → Break down a feature, design the approach   │
+│  └── cloud-devops-engineer → Infrastructure, CI/CD, Docker, monitoring │
+├─────────────────────────────────────────────────────────────────────┤
+│  Implementation Phase                                               │
+│  └── task-runner      → Pick up a Notion task and implement it      │
+├─────────────────────────────────────────────────────────────────────┤
+│  Verification Phase                                                 │
+│  ├── test-runner      → Run all checks, browser-test UI changes     │
+│  └── code-reviewer    → Review code quality before committing       │
+├─────────────────────────────────────────────────────────────────────┤
+│  Maintenance Phase                                                  │
+│  └── bug-fixer        → Diagnose and fix failing tests or bugs      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Invoking an Agent
+
+In Claude Code, use the `/agents` slash command and select the role you need:
+
+```
+/agents task-runner     # Start working on the next Notion task
+/agents test-runner     # Run all quality checks
+/agents code-reviewer   # Review recent changes
+/agents tech-lead       # Plan a complex feature
+/agents bug-fixer       # Diagnose and fix a bug
+/agents cloud-devops-engineer  # Work on infrastructure & DevOps
+```
+
+Each agent follows its own structured workflow with specific output formats, making it easy to chain them together (e.g., `tech-lead` → `task-runner` → `test-runner` → `code-reviewer`).
 
 ### Gemini CLI
 
@@ -278,6 +361,7 @@ After installation, edit the files directly to adapt the workflow to your projec
 | `CLAUDE.md` / `GEMINI.md` | Add project-specific conventions, tech stack details, test commands |
 | `init.sh` | Change the port, add env var checks, seed a database |
 | `start-work.sh` | Adjust the system prompt passed to the agent |
+| `analyze-arch.sh` | Extend the architecture prompt, add custom sections |
 | `.claude/settings.json` | Add additional MCP servers (Playwright, GitHub, etc.) |
 
 ### Recommended Additional MCP Servers
@@ -304,9 +388,17 @@ your-project/
 ├── GEMINI.md                          # Gemini CLI workflow
 ├── init.sh                            # Environment initialization
 ├── start-work.sh                      # Claude Code launcher
+├── analyze-arch.sh                    # Architecture review script
 ├── progress.txt                       # Agent session log (auto-generated)
 ├── .claude/
-│   └── settings.json                  # Claude Code MCP config
+│   ├── settings.json                  # Claude Code MCP config
+│   └── agents/                        # Specialized agent roles
+│       ├── task-runner.md
+│       ├── test-runner.md
+│       ├── code-reviewer.md
+│       ├── tech-lead.md
+│       ├── bug-fixer.md
+│       └── cloud-devops-engineer.md
 ├── .gemini/
 │   └── settings.json                  # Gemini CLI MCP config
 └── .github/
