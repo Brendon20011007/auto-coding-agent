@@ -302,12 +302,256 @@ function installSkills(dbId, vaultPath) {
   }
 }
 
+// ─── Sync helpers ─────────────────────────────────────────────────────────────
+
+/** Copy a file only if the destination does not already exist. Returns 'installed' or 'skipped'. */
+function copyFileIfMissing(src, dest, replacements) {
+  if (fs.existsSync(dest)) return 'skipped';
+  if (replacements) {
+    copyFileWithReplacements(src, dest, replacements);
+  } else {
+    copyFile(src, dest);
+  }
+  return 'installed';
+}
+
+/** Recursively copy a directory, skipping files that already exist. */
+function copyDirIfMissing(srcDir, destDir, replacements) {
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const srcPath  = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirIfMissing(srcPath, destPath, replacements);
+    } else if (entry.name.endsWith('.md')) {
+      copyFileIfMissing(srcPath, destPath, replacements);
+    } else {
+      const status = copyFileIfMissing(srcPath, destPath, null);
+      if (status === 'installed' && entry.name.endsWith('.sh')) makeExecutable(destPath);
+    }
+  }
+}
+
+/**
+ * Detect which agent configs are already installed in TARGET_DIR.
+ * Returns a Set containing 'claude', 'gemini', and/or 'copilot'.
+ */
+function detectInstalledTargets() {
+  const found = new Set();
+  if (fs.existsSync(path.join(TARGET_DIR, 'CLAUDE.md'))) found.add('claude');
+  if (fs.existsSync(path.join(TARGET_DIR, 'GEMINI.md'))) found.add('gemini');
+  if (fs.existsSync(path.join(TARGET_DIR, '.github', 'copilot-instructions.md'))) found.add('copilot');
+  return found;
+}
+
+/**
+ * Try to extract dbId and vaultPath from an already-installed config file.
+ * Returns { dbId, vaultPath } — either may be null if not found or still a placeholder.
+ */
+function extractConfig(filePath) {
+  let dbId = null;
+  let vaultPath = null;
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+
+    // Match a 32-char hex Notion DB ID (with optional hyphens)
+    const dbMatch = content.match(/([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})/i);
+    if (dbMatch) dbId = dbMatch[1];
+
+    // Match an absolute path: Windows C:\... or C:/...  or Unix /seg1/seg2/seg3+
+    const vaultMatch = content.match(/([A-Za-z]:[\\\/][^\s"'`\[\]]{4,}|\/(?:[^\/\s"'`\[\]]+\/){2,}[^\/\s"'`\[\]]*)/);
+    if (vaultMatch && !vaultMatch[1].includes('{{')) vaultPath = vaultMatch[1];
+  } catch (_) {}
+  return { dbId, vaultPath };
+}
+
+/** Install only missing Claude workflow files. */
+function installClaudeMissing(dbId, token, vaultPath) {
+  const replacements = {
+    '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]',
+    '{{OBSIDIAN_VAULT}}': vaultPath || '[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]',
+  };
+
+  const files = [
+    { src: path.join(TEMPLATES_DIR, 'claude', 'init.sh'),        dest: path.join(TARGET_DIR, 'init.sh'),        reps: replacements, exe: true },
+    { src: path.join(TEMPLATES_DIR, 'claude', 'start-work.sh'),  dest: path.join(TARGET_DIR, 'start-work.sh'),  reps: null,         exe: true },
+    { src: path.join(TEMPLATES_DIR, 'claude', 'analyze-arch.sh'),dest: path.join(TARGET_DIR, 'analyze-arch.sh'),reps: null,         exe: true },
+  ];
+
+  for (const f of files) {
+    const status = copyFileIfMissing(f.src, f.dest, f.reps);
+    if (status === 'installed' && f.exe) makeExecutable(f.dest);
+    const label = path.basename(f.dest);
+    print(status === 'installed' ? green(`  ✔ ${label}`) : dim(`  ↩ ${label}  (already exists — skipped)`));
+  }
+
+  // Agent definitions
+  const agentsTemplateDir = path.join(TEMPLATES_DIR, 'claude', 'agents');
+  const agentsTargetDir   = path.join(TARGET_DIR, '.claude', 'agents');
+  if (fs.existsSync(agentsTemplateDir)) {
+    const agentFiles = fs.readdirSync(agentsTemplateDir).filter(f => f.endsWith('.md'));
+    for (const file of agentFiles) {
+      const dest   = path.join(agentsTargetDir, file);
+      const status = copyFileIfMissing(path.join(agentsTemplateDir, file), dest, null);
+      const name   = path.basename(file, '.md');
+      print(status === 'installed'
+        ? green(`  ✔ .claude/agents/${file}  (${name} agent)`)
+        : dim(`  ↩ .claude/agents/${file}  (already exists — skipped)`));
+    }
+  }
+
+  // MCP settings — only write if file doesn't already exist
+  if (token) {
+    const settingsPath = path.join(TARGET_DIR, '.claude', 'settings.json');
+    if (!fs.existsSync(settingsPath)) {
+      mergeJson(settingsPath, claudeMcpConfig(token));
+      print(green('  ✔ .claude/settings.json  (Notion MCP configured)'));
+    } else {
+      print(dim('  ↩ .claude/settings.json  (already exists — skipped)'));
+    }
+  }
+
+  installSkillsMissing(dbId, vaultPath);
+}
+
+/** Install only missing Gemini workflow files. */
+function installGeminiMissing(dbId, token, vaultPath) {
+  const replacements = {
+    '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]',
+    '{{OBSIDIAN_VAULT}}': vaultPath || '[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]',
+  };
+
+  if (token) {
+    const settingsPath = path.join(TARGET_DIR, '.gemini', 'settings.json');
+    if (!fs.existsSync(settingsPath)) {
+      mergeJson(settingsPath, geminiMcpConfig(token));
+      print(green('  ✔ .gemini/settings.json  (Notion MCP configured)'));
+    } else {
+      print(dim('  ↩ .gemini/settings.json  (already exists — skipped)'));
+    }
+  }
+
+  installSkillsMissing(dbId, vaultPath);
+}
+
+/** Install only missing Copilot workflow files. */
+function installCopilotMissing(dbId, vaultPath) {
+  installSkillsMissing(dbId, vaultPath);
+}
+
+/** Install skills, skipping any skill files that already exist. */
+function installSkillsMissing(dbId, vaultPath) {
+  const replacements = {
+    '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]',
+    '{{OBSIDIAN_VAULT}}': vaultPath || '[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]',
+  };
+
+  const skillsTemplateDir = path.join(TEMPLATES_DIR, 'skills');
+  if (!fs.existsSync(skillsTemplateDir)) return;
+
+  const skillNames = fs.readdirSync(skillsTemplateDir).filter(f =>
+    fs.statSync(path.join(skillsTemplateDir, f)).isDirectory()
+  );
+
+  for (const skillName of skillNames) {
+    const srcSkillDir = path.join(skillsTemplateDir, skillName);
+    let anyInstalled = false;
+    for (const prefix of ['.github', '.claude']) {
+      const destDir = path.join(TARGET_DIR, prefix, 'skills', skillName);
+      // Check if skill dir already fully exists
+      const mainSkillFile = path.join(destDir, 'SKILL.md');
+      if (!fs.existsSync(mainSkillFile)) {
+        copyDirIfMissing(srcSkillDir, destDir, replacements);
+        anyInstalled = true;
+      }
+    }
+    print(anyInstalled
+      ? green(`  ✔ .github/skills/${skillName}/  (+ .claude/skills/${skillName}/)`)
+      : dim(`  ↩ skills/${skillName}/  (already exists — skipped)`));
+  }
+}
+
+// ─── Sync Main ───────────────────────────────────────────────────────────────
+
+async function syncMain() {
+  print('');
+  print(bold(cyan('╔══════════════════════════════════════════╗')));
+  print(bold(cyan('║      create-notion-agent  v1.4.0         ║')));
+  print(bold(cyan('║         sync — fill in missing files     ║')));
+  print(bold(cyan('╚══════════════════════════════════════════╝')));
+  print('');
+  print(dim('Detects existing agent config and installs any missing workflow files + skills.'));
+  print(dim(`Target: ${TARGET_DIR}`));
+  print('');
+
+  // ── Detect installed targets ──
+  const targets = detectInstalledTargets();
+  if (targets.size === 0) {
+    print(red('✖  No agent config found in this directory.'));
+    print(dim('   Run npx create-notion-agent first to do a full setup.'));
+    print('');
+    process.exit(1);
+  }
+
+  print(bold('Detected agent configs:'));
+  for (const t of targets) print(green(`  ✔ ${t}`));
+  print('');
+
+  // ── Extract existing config ──
+  let dbId = null;
+  let vaultPath = null;
+
+  const configCandidates = [
+    path.join(TARGET_DIR, 'CLAUDE.md'),
+    path.join(TARGET_DIR, 'GEMINI.md'),
+    path.join(TARGET_DIR, '.github', 'copilot-instructions.md'),
+  ];
+  for (const f of configCandidates) {
+    if (fs.existsSync(f)) {
+      const extracted = extractConfig(f);
+      if (!dbId && extracted.dbId) dbId = extracted.dbId;
+      if (!vaultPath && extracted.vaultPath) vaultPath = extracted.vaultPath;
+    }
+  }
+
+  if (dbId)      print(dim(`  DB ID recovered:    ${dbId}`));
+  else           print(yellow('  ⚠  Notion DB ID not found in existing files — placeholders will be used'));
+  if (vaultPath) print(dim(`  Vault path recovered: ${vaultPath}`));
+  else           print(yellow('  ⚠  Obsidian vault path not found in existing files — placeholders will be used'));
+  print('');
+
+  // ── Optional: Notion token (can't be recovered from files) ──
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  print(bold('Notion API Token  (optional — only needed to write MCP settings.json)'));
+  print(dim('  Leave blank to skip MCP settings (you can configure manually later).'));
+  const token = (await ask(rl, yellow('API Token (or Enter to skip): '))).trim();
+  rl.close();
+
+  // ── Sync files ──
+  print('');
+  print(bold('Syncing missing files...'));
+
+  try {
+    if (targets.has('claude'))  installClaudeMissing(dbId, token, vaultPath);
+    if (targets.has('gemini'))  installGeminiMissing(dbId, token, vaultPath);
+    if (targets.has('copilot')) installCopilotMissing(dbId, vaultPath);
+  } catch (err) {
+    print('\n' + red('Error: ' + err.message));
+    process.exit(1);
+  }
+
+  print('');
+  print(bold(green('✅  Sync complete!')));
+  print(dim('   Files marked ↩ already existed and were not modified.'));
+  print('');
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
-  print(bold(cyan('║      create-notion-agent  v1.3.0         ║')));
+  print(bold(cyan('║      create-notion-agent  v1.4.0         ║')));
   print(bold(cyan('║  Notion-powered autonomous agent setup   ║')));
   print(bold(cyan('╚══════════════════════════════════════════╝')));
   print('');
@@ -463,7 +707,15 @@ async function main() {
   print('');
 }
 
-main().catch(err => {
-  process.stderr.write('Fatal: ' + err.message + '\n');
-  process.exit(1);
-});
+const subcommand = process.argv[2];
+if (subcommand === 'sync') {
+  syncMain().catch(err => {
+    process.stderr.write('Fatal: ' + err.message + '\n');
+    process.exit(1);
+  });
+} else {
+  main().catch(err => {
+    process.stderr.write('Fatal: ' + err.message + '\n');
+    process.exit(1);
+  });
+}
