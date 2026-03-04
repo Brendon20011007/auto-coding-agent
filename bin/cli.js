@@ -101,6 +101,22 @@ function copyFile(src, dest) {
   fs.copyFileSync(src, dest);
 }
 
+function copyDirWithReplacements(srcDir, destDir, replacements) {
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const srcPath  = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirWithReplacements(srcPath, destPath, replacements);
+    } else if (entry.name.endsWith('.md')) {
+      copyFileWithReplacements(srcPath, destPath, replacements);
+    } else {
+      copyFile(srcPath, destPath);
+      if (entry.name.endsWith('.sh')) makeExecutable(destPath);
+    }
+  }
+}
+
 function makeExecutable(filePath) {
   try {
     fs.chmodSync(filePath, 0o755);
@@ -217,6 +233,8 @@ function installClaude(dbId, token, vaultPath) {
     mergeJson(settingsPath, claudeMcpConfig(token));
     print(green('  ✔ .claude/settings.json  (Notion MCP configured)'));
   }
+
+  installSkills(dbId, vaultPath);
 }
 
 function installGemini(dbId, token, vaultPath) {
@@ -238,6 +256,8 @@ function installGemini(dbId, token, vaultPath) {
     mergeJson(settingsPath, geminiMcpConfig(token));
     print(green('  ✔ .gemini/settings.json  (Notion MCP configured)'));
   }
+
+  installSkills(dbId, vaultPath);
 }
 
 function installCopilot(dbId, vaultPath) {
@@ -252,6 +272,34 @@ function installCopilot(dbId, vaultPath) {
     replacements
   );
   print(green('  ✔ .github/copilot-instructions.md'));
+
+  installSkills(dbId, vaultPath);
+}
+
+function installSkills(dbId, vaultPath) {
+  const replacements = {
+    '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]',
+    '{{OBSIDIAN_VAULT}}': vaultPath || '[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]',
+  };
+
+  const skillsTemplateDir = path.join(TEMPLATES_DIR, 'skills');
+  if (!fs.existsSync(skillsTemplateDir)) return;
+
+  const skillNames = fs.readdirSync(skillsTemplateDir).filter(f =>
+    fs.statSync(path.join(skillsTemplateDir, f)).isDirectory()
+  );
+
+  for (const skillName of skillNames) {
+    const srcSkillDir = path.join(skillsTemplateDir, skillName);
+    for (const prefix of ['.github', '.claude']) {
+      copyDirWithReplacements(
+        srcSkillDir,
+        path.join(TARGET_DIR, prefix, 'skills', skillName),
+        replacements
+      );
+    }
+    print(green(`  ✔ .github/skills/${skillName}/  (+ .claude/skills/${skillName}/)`));
+  }
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -259,7 +307,7 @@ function installCopilot(dbId, vaultPath) {
 async function main() {
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
-  print(bold(cyan('║      create-notion-agent  v1.2.0         ║')));
+  print(bold(cyan('║      create-notion-agent  v1.3.0         ║')));
   print(bold(cyan('║  Notion-powered autonomous agent setup   ║')));
   print(bold(cyan('╚══════════════════════════════════════════╝')));
   print('');
@@ -404,7 +452,10 @@ async function main() {
     print('');
     print(bold('  GitHub Copilot:'));
     print('  1. Copilot reads .github/copilot-instructions.md automatically as workspace instructions');
-    if (!dbId) print('  2. Open .github/copilot-instructions.md and replace [YOUR_NOTION_DATABASE_ID]');
+    print('  2. Two Agent Skills installed (.github/skills/ + .claude/skills/):');
+    print(dim('       • run-next-task   → say "start working" or "run the next task"'));
+    print(dim('       • add-coding-task → say "add a task: [description]"'));
+    if (!dbId) print('  3. Open .github/copilot-instructions.md and replace [YOUR_NOTION_DATABASE_ID]');
   }
 
   print('');

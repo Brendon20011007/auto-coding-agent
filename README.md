@@ -231,10 +231,24 @@ The `GEMINI.md` file follows the same workflow but is adapted for Gemini's conve
 ```
 your-project/
 └── .github/
-    └── copilot-instructions.md  ← Workspace-level agent instructions
+    ├── copilot-instructions.md  ← Workspace-level agent instructions
+    └── skills/
+        ├── run-next-task/       ← Agent Skill: run the coding loop
+        └── add-coding-task/     ← Agent Skill: queue a new task in Notion
 ```
 
 GitHub Copilot reads `.github/copilot-instructions.md` automatically as workspace instructions. Since Copilot does not yet support MCP servers, the MCP setup step is skipped and the init/start scripts are not included.
+
+### Agent Skills
+
+Two [Agent Skills](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills) are installed alongside every platform target. Copilot (and Claude Code) load them automatically and invoke them when your message matches their description:
+
+| Skill | Trigger phrases | What it does |
+|-------|----------------|--------------|
+| **`run-next-task`** | "start working", "run the next task", "pick up a task from Notion", "execute the agent loop" | Fetches the next `To Do` task from Notion, implements it, passes all quality gates, commits, and marks it `Done` |
+| **`add-coding-task`** | "add a task", "I want to implement X", "put this in the backlog", "schedule this for the agent" | Gathers title, description, and acceptance criteria, then creates a `To Do` page in your Notion database |
+
+Skills are stored in both `.github/skills/` (read by Copilot) and `.claude/skills/` (read by Claude Code) — installed once, works in both. The Notion Database ID is substituted at install time.
 
 ---
 
@@ -447,17 +461,23 @@ your-project/
 ├── progress.txt                       # Agent session log (auto-generated)
 ├── .claude/
 │   ├── settings.json                  # Claude Code MCP config
-│   └── agents/                        # Specialized agent roles
-│       ├── task-runner.md
-│       ├── test-runner.md
-│       ├── code-reviewer.md
-│       ├── tech-lead.md
-│       ├── bug-fixer.md
-│       └── cloud-devops-engineer.md
+│   ├── agents/                        # Specialized agent roles
+│   │   ├── task-runner.md
+│   │   ├── test-runner.md
+│   │   ├── code-reviewer.md
+│   │   ├── tech-lead.md
+│   │   ├── bug-fixer.md
+│   │   └── cloud-devops-engineer.md
+│   └── skills/                        # Agent Skills (Claude Code)
+│       ├── run-next-task/
+│       └── add-coding-task/
 ├── .gemini/
 │   └── settings.json                  # Gemini CLI MCP config
 └── .github/
-    └── copilot-instructions.md        # GitHub Copilot instructions
+    ├── copilot-instructions.md        # GitHub Copilot instructions
+    └── skills/                        # Agent Skills (Copilot)
+        ├── run-next-task/
+        └── add-coding-task/
 ```
 
 ---

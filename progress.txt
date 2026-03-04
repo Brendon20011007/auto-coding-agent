@@ -1324,3 +1324,18 @@ Task 4 (用户认证 - 登录页面) 被错误地标记为完成，原因：
 ### Notes:
 - `verifyNotionDatabase` and `verifyObsidianVault` are both non-blocking — warnings are shown but install proceeds regardless.
 - `rl.close()` was intentionally moved to AFTER both validations so `verifyObsidianVault` can still prompt the user to create missing vault directories.
+
+## 2026-03-03 - Add Agent Skills (v1.3.0)
+
+### What was done:
+- Created templates/skills/run-next-task/ (SKILL.md, scripts/start-loop.sh, references/SOP.md)
+- Created templates/skills/add-coding-task/ (SKILL.md)
+- Updated bin/cli.js: added copyDirWithReplacements(), installSkills(dbId, vaultPath), called from all 3 install functions, bumped header to v1.3.0
+- Installed skills to repo root: .github/skills/ and .claude/skills/
+- Updated README.md: GitHub Copilot section shows skills structure, new Agent Skills table, updated Project Structure Reference
+- Bumped package.json version 1.2.0 -> 1.3.0
+
+### Testing:
+- Verified installSkills is called from installClaude, installGemini, installCopilot (grep confirmed 4 matches)
+- Verified .github/skills/ and .claude/skills/ have correct structure (8 files each, no stray root SKILL.md)
+- Verified package.json shows "version": "1.3.0"
