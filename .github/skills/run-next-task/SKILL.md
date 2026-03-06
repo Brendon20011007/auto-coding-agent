@@ -37,9 +37,14 @@ Then scan the project root for config files to detect the stack:
 ### Step 2 — Fetch Task from Notion
 
 Query the Notion database (ID: `[YOUR_NOTION_DATABASE_ID]`) using the `notion_query_database` MCP tool.
-Filter for `Status = To Do`. Take the **first** result.
 
-If no tasks are `To Do`, say "No pending tasks found in Notion." and stop.
+Filter for **both** of the following conditions:
+1. `Status = To Do`
+2. `Agent = [your agent identity]` **OR** `Agent = Any`
+
+Your agent identity is defined in your primary instruction file (`CLAUDE.md` → `Claude Code`, `.github/copilot-instructions.md` → `GitHub Copilot`). Only pick up tasks assigned to you or to `Any`.
+
+Take the **first** matching result. If none match, say "No pending tasks for this agent in Notion." and stop.
 
 Immediately call `notion_update_page` to set `Status` to `In Progress`.
 

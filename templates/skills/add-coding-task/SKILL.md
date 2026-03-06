@@ -28,14 +28,20 @@ proceeding:
 | **Title** | "What should this task be called? (short, action-oriented — e.g. 'Add dark mode toggle')" |
 | **Description** | "Describe what needs to be implemented. Include context, constraints, and any technical notes." |
 | **Acceptance criteria** | "How will the agent know when this task is done? List 2–5 specific, verifiable conditions." |
+| **Agent** | "Which agent should handle this task? Reply `1` for **Claude Code** (UI/frontend/backend), `2` for **GitHub Copilot** (DB/infra/research), or `3` for **Any**." |
 
 Do not invent or guess missing information. Ask the user for each missing field.
+
+Agent mapping:
+- `1` / `claude` / `frontend` / `backend` → `Claude Code`
+- `2` / `copilot` / `github` / `db` / `infra` / `database` / `cloud` / `research` → `GitHub Copilot`
+- `3` / `any` / `both` → `Any`
 
 ---
 
 ### 2. Format the Task
 
-Once you have all three fields, structure the task content:
+Once you have all four fields, structure the task content:
 
 ```
 Title: [user's title]
@@ -58,6 +64,7 @@ Use the `create_a_page` Notion MCP tool to create a new page in database `{{DB_I
 **Properties to set:**
 - `Task Name` (title): the task title
 - `Status` (select): `To Do`
+- `Agent` (select): one of `Claude Code`, `GitHub Copilot`, or `Any`
 - `Description` (rich_text): the full description + acceptance criteria block above
 
 ---
@@ -81,5 +88,9 @@ Run the "run-next-task" skill (or say "start working") to start it now.
 ## Notes
 
 - Always set `Status` to `To Do` — never `In Progress` or `Done`
+- Always set `Agent` to one of `Claude Code`, `GitHub Copilot`, or `Any` — never leave it blank
+- **Claude Code** handles: React/Next.js components, API routes, business logic, browser testing
+- **GitHub Copilot** handles: SQL migrations, Supabase/RLS, AWS/Terraform, Docker, external API research
+- **Any** — either agent may pick it up (use sparingly)
 - If the Notion MCP tool is not available, instruct the user to add the task manually and provide the formatted content to paste
 - Write acceptance criteria as checkboxes so the agent can verify completion

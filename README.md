@@ -25,6 +25,37 @@ The workflow was built and validated over a 10-hour unattended coding session th
 
 ---
 
+## Dual-Agent Architecture
+
+Starting from v1.5.0, `create-notion-agent` supports a **two-agent system** where Claude Code and GitHub Copilot divide responsibilities and pick up tasks from the same Notion board without stepping on each other.
+
+| Agent | Domain | Toolchain |
+|-------|--------|-----------|
+| **Claude Code** | Frontend UI, Backend API, business logic, browser testing & self-debugging | Filesystem, terminal, Playwright MCP |
+| **GitHub Copilot Agent** | Database schemas & migrations, cloud infrastructure, external API research | Notion MCP, GitHub MCP, AWS/CDK MCP, Context7 MCP |
+
+### Task Routing
+
+Each Notion task has an **`Agent`** property (select field) that determines which agent picks it up:
+
+| `Agent` value | Picked up by |
+|---------------|--------------|
+| `Claude Code` | Claude Code only |
+| `GitHub Copilot` | GitHub Copilot Agent only |
+| `Any` | Whichever agent runs next |
+
+Agents filter task queries by their own identity — Claude Code skips `GitHub Copilot` tasks and vice versa. Both agents claim only the **first matching** `To Do` task and immediately set it to `In Progress`.
+
+### Running Both Agents in Parallel
+
+Because each agent has its own task filter, you can run Claude Code and GitHub Copilot Agent simultaneously against the same Notion database safely. They will never claim the same task.
+
+### Delegation Rule
+
+If Claude Code encounters a task that requires a database schema change or cloud infrastructure change, it **pauses and delegates** to GitHub Copilot Agent before continuing with the implementation.
+
+---
+
 ## Quick Start
 
 ### 1. Run the installer
@@ -61,6 +92,27 @@ chmod +x init.sh start-work.sh
 # or launch Gemini CLI / Copilot manually (see below)
 ```
 
+### Updating an Existing Installation
+
+If you already have `create-notion-agent` set up and want to pull the latest instruction files and skills without re-running the full installer:
+
+```bash
+npx create-notion-agent update
+```
+
+This command:
+- Auto-detects which agents you have installed (Claude Code, Gemini, Copilot)
+- Recovers your existing Notion Database ID and Obsidian vault path from current files
+- **Overwrites** `CLAUDE.md`, `GEMINI.md`, `copilot-instructions.md`, and all skill files with the latest versions
+- **Preserves** `settings.json` (MCP config), `init.sh`, `start-work.sh`, and `progress.txt`
+- Asks for confirmation before making any changes
+
+Also available as:
+
+```bash
+npx create-notion-agent upgrade
+```
+
 ---
 
 ## Prerequisites
@@ -84,6 +136,9 @@ The agent expects a Notion database with these exact properties:
 | `Status` | Select | One of: `To Do`, `In Progress`, `Done`, `Blocked` |
 | `Description` | Text | Full task requirements — the agent reads this |
 | `Agent Report` | Text | Written by the agent after completing or blocking |
+| `Agent` | Select | One of: `Claude Code`, `GitHub Copilot`, `Any` — controls which agent picks up the task |
+
+> **New in v1.5.0:** You must add the `Agent` select property to your Notion database and set its allowed values to `Claude Code`, `GitHub Copilot`, and `Any`. Existing tasks without an `Agent` value will not be picked up by either agent until a value is assigned — set them to `Any` to let the next available agent claim them.
 
 ### Status Lifecycle
 
@@ -91,6 +146,19 @@ The agent expects a Notion database with these exact properties:
 To Do  →  In Progress  →  Done
                        ↘  Blocked  (if something goes wrong)
 ```
+
+### Task Assignment Workflow
+
+When you use the `add-coding-task` skill (see [Agent Skills](#agent-skills)) to create a new task, you will be asked which agent should handle it:
+
+```
+Which agent should handle this task?
+  1) Claude Code   — frontend, backend, business logic
+  2) GitHub Copilot — database, cloud infra, research
+  3) Any           — either agent, whoever runs next
+```
+
+The skill sets the `Agent` property automatically when it creates the Notion page.
 
 ### Getting Your Database ID
 
@@ -237,7 +305,21 @@ your-project/
         └── add-coding-task/     ← Agent Skill: queue a new task in Notion
 ```
 
-GitHub Copilot reads `.github/copilot-instructions.md` automatically as workspace instructions. Since Copilot does not yet support MCP servers, the MCP setup step is skipped and the init/start scripts are not included.
+GitHub Copilot reads `.github/copilot-instructions.md` automatically as workspace instructions. The Copilot Agent is configured as the **database, infrastructure, and research** specialist in the dual-agent system.
+
+#### GitHub Copilot MCP Servers
+
+The Copilot Agent leverages VS Code's connected MCP servers for deep research and infrastructure work:
+
+| MCP Server | Used for |
+|------------|----------|
+| **Notion MCP** | Fetching and updating tasks on the Notion board |
+| **GitHub MCP** | Reading issues, PRs, and repository context |
+| **AWS Knowledge MCP** | AWS service documentation and architecture guidance |
+| **CDK MCP** | CDK construct patterns and IaC generation |
+| **Context7 MCP** | Up-to-date library documentation and code examples |
+
+The Copilot Agent follows a **research-first** workflow: it queries Context7 and AWS Knowledge before writing any infrastructure code, then validates changes with `supabase db push` or equivalent before marking a task `Done`.
 
 ### Agent Skills
 
@@ -245,8 +327,10 @@ Two [Agent Skills](https://docs.github.com/en/copilot/concepts/agents/about-agen
 
 | Skill | Trigger phrases | What it does |
 |-------|----------------|--------------|
-| **`run-next-task`** | "start working", "run the next task", "pick up a task from Notion", "execute the agent loop" | Fetches the next `To Do` task from Notion, implements it, passes all quality gates, commits, and marks it `Done` |
-| **`add-coding-task`** | "add a task", "I want to implement X", "put this in the backlog", "schedule this for the agent" | Gathers title, description, and acceptance criteria, then creates a `To Do` page in your Notion database |
+| **`run-next-task`** | "start working", "run the next task", "pick up a task from Notion", "execute the agent loop" | Fetches the next `To Do` task **assigned to the current agent** from Notion, implements it, passes all quality gates, commits, and marks it `Done` |
+| **`add-coding-task`** | "add a task", "I want to implement X", "put this in the backlog", "schedule this for the agent" | Gathers title, description, acceptance criteria, and **which agent should handle it**, then creates a `To Do` page in your Notion database with the `Agent` property set |
+
+> **v1.5.0 change:** `run-next-task` now filters by **agent identity** — Claude Code only picks up tasks where `Agent` is `Claude Code` or `Any`; GitHub Copilot Agent only picks up `GitHub Copilot` or `Any` tasks. This enables both agents to work from the same board simultaneously without collision.
 
 Skills are stored in both `.github/skills/` (read by Copilot) and `.claude/skills/` (read by Claude Code) — installed once, works in both. The Notion Database ID is substituted at install time.
 
@@ -317,6 +401,7 @@ Every agent session follows this exact sequence:
 ┌────────────────────▼────────────────────────────────────────┐
 │ Step 2  Fetch Task                                          │
 │         notion_query_database → filter Status = "To Do"     │
+│                              + Agent = [self] OR "Any"      │
 │         notion_update_page   → set Status = "In Progress"   │
 └────────────────────┬────────────────────────────────────────┘
                      │
@@ -332,7 +417,9 @@ Every agent session follows this exact sequence:
 │         Lint gate   → 0 errors  (auto-detected command)      │
 │         Test gate   → all pass  (auto-detected command)      │
 │         Build gate  → succeeds  (auto-detected command)      │
-│         Browser test → UI changes only (Playwright MCP)     │
+│         Browser test → UI/API changes (Playwright MCP)      │
+│           └─ Self-debug loop: navigate → verify → fix       │
+│              (max 3 iterations before escalating Blocked)   │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
@@ -497,7 +584,13 @@ Skip it during installation. The workflow files are still copied with a `[YOUR_N
 The `bin/cli.js` installer works on Windows. The `init.sh` and `start-work.sh` shell scripts require WSL, Git Bash, or a Unix-like shell.
 
 **Q: Can I run multiple agents in parallel?**
-Not recommended against the same Notion database. The agent picks the first `To Do` task and immediately marks it `In Progress`. Running two agents simultaneously may cause them to pick the same task.
+Yes — with the dual-agent system introduced in v1.5.0. Claude Code and GitHub Copilot Agent each filter tasks by their own `Agent` identity, so they will never claim the same task. Run them simultaneously against the same Notion database safely. Running **two instances of the same agent** in parallel (e.g., two Claude Code sessions) is still not recommended, as they may pick the same task before either marks it `In Progress`.
+
+**Q: How do I add the `Agent` property to my existing Notion database?**
+Open your Notion database, click `+` to add a property, select **Select**, name it `Agent`, and add three options: `Claude Code`, `GitHub Copilot`, `Any`. Then set existing `To Do` tasks to `Any` so they are picked up by the next available agent.
+
+**Q: What is the browser self-debugging loop?**
+For any UI or API change, Claude Code automatically opens the app in a browser (via Playwright MCP), verifies the change works, reads any console errors, and applies fixes — all without human intervention. It retries up to 3 times before escalating the task to `Blocked`.
 
 ---
 

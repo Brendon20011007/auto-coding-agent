@@ -1,8 +1,17 @@
 # Project Context
 
-This workflow is **stack-agnostic** and works with any language or framework. The agent detects your project type at runtime by scanning config files.
+This workflow runs in a **two-agent system**. Gemini CLI acts as a supplementary task runner, aware of the division of responsibilities between the two primary agents.
 
-> Detailed task requirements are managed dynamically via a Notion Database.
+## Two-Agent Architecture
+
+| Agent | Domain | Toolchain |
+|-------|--------|-----------|
+| **Claude Code** | Frontend UI, Backend API, business logic, browser testing & self-debugging | Filesystem, terminal, Playwright browser |
+| **GitHub Copilot Agent** | Database schemas & migrations, cloud infrastructure, knowledge research | Notion MCP, GitHub MCP, AWS/CDK MCP, Context7 MCP |
+
+> **Gemini CLI role:** handles general-purpose tasks that don't require deep specialisation in either domain, or acts as a coordinator when both agents need to be sequenced. For DB/infra work, defer to GitHub Copilot Agent. For UI/API work, defer to Claude Code.
+
+This workflow is **stack-agnostic** and works with any language or framework. The agent detects your project type at runtime by scanning config files.
 
 ## Notion Integration Context
 
@@ -140,9 +149,10 @@ Commands are derived from project config files found at runtime — no manual co
 ## Key Rules
 
 1. **One task per session** — Fetch one `To Do` task from Notion and complete it fully.
-2. **Test before marking complete** — All steps must pass before updating Notion to `Done`.
-3. **Browser testing for UI changes** — Major page changes require browser verification.
-4. **Document in progress.txt** — Append a summary after each task.
-5. **One commit per task** — Code + progress.txt in a single commit.
-6. **Never skip Notion updates** — Status transitions (`To Do` → `In Progress` → `Done`/`Blocked`) are mandatory.
-7. **Stop if blocked** — Do not commit; update Notion to `Blocked` and output blocking info.
+2. **Respect agent boundaries** — Do not write SQL migrations, RLS policies, or cloud IaC (GitHub Copilot's domain). Do not perform browser/Playwright testing (Claude Code's domain).
+3. **Test before marking complete** — All steps must pass before updating Notion to `Done`.
+4. **Browser testing for UI changes** — Major page changes require browser verification by Claude Code; flag this in `Agent Report` if Gemini cannot invoke Playwright directly.
+5. **Document in progress.txt** — Append a summary after each task.
+6. **One commit per task** — Code + progress.txt in a single commit.
+7. **Never skip Notion updates** — Status transitions (`To Do` → `In Progress` → `Done`/`Blocked`) are mandatory.
+8. **Stop if blocked** — Do not commit; update Notion to `Blocked` and output blocking info.

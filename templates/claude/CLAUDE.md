@@ -56,11 +56,34 @@ If no recognised config is found, ask the agent task description or README for g
 
 ### Step 2: Fetch Task from Notion
 
+This agent is **Claude Code**. Only pick up tasks assigned to this agent.
+
 1. Use the Notion MCP tool `notion_query_database` to query the Target Database.
-2. Filter the query strictly for items where `Status` is `To Do`.
-3. Pick the FIRST task in the list. If there are no `To Do` tasks, output "No pending tasks found in Notion. Waiting..." and STOP execution.
+2. Filter the query for items where **both** conditions are true:
+   - `Status` is `To Do`
+   - `Agent` is `Claude Code` **OR** `Agent` is `Any`
+3. Pick the FIRST matching task. If there are no matching tasks, output "No pending tasks for Claude Code in Notion. Waiting..." and STOP execution.
 4. IMMEDIATELY use `notion_update_page` to change the selected task's `Status` to `In Progress`.
 5. Read the `Description` property carefully to understand the requirement.
+
+> If a task's `Agent` is `GitHub Copilot`, **skip it** — that task belongs to GitHub Copilot Agent.
+
+### Headless Task Injection (Dispatcher Mode)
+
+If this session was launched by the `dispatch-agent-tasks` dispatcher, the prompt
+will contain a `TASK_CONTEXT:` block. When that is detected:
+
+1. **Skip** the `notion_query_database` call entirely.
+2. Parse the injected values:
+   ```
+   TASK_CONTEXT: name=<task_name> | id=<page_id> | description=<description>
+   ```
+3. Use `name`, `id`, and `description` as the task to work on.
+4. At the end of the session, call `notion_update_page` using the injected `id`
+   to mark the task `Done` or `Blocked` — **do not skip this step**.
+
+All other steps (Step 1 init, Step 3 knowledge retrieval, Step 4 implement & test,
+Step 5 document, Step 6 commit) remain MANDATORY.
 
 ### Step 3: Knowledge Retrieval (Obsidian RAG)
 
@@ -203,3 +226,4 @@ The agent reads these files at the start of every session and uses the commands 
 8. **One commit per task** — Code + progress.txt in a single commit.
 9. **Never skip Notion updates** — Status transitions (`To Do` → `In Progress` → `Done`/`Blocked`) are mandatory.
 10. **Stop if blocked** — Do not commit; update Notion to `Blocked` and output blocking info.
+11. **Headless mode** — When invoked with `TASK_CONTEXT:`, skip Notion fetch and use the injected `name`, `id`, and `description` directly. Still update Notion at the end.

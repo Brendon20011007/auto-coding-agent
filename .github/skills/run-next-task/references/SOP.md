@@ -25,8 +25,11 @@ Also read `CONTRIBUTING.md`, `.editorconfig`, and any linter config — treat as
 
 ## Step 2: Fetch Task from Notion
 
-1. `notion_query_database` — database ID: `[YOUR_NOTION_DATABASE_ID]`, filter `Status = To Do`
-2. Take the **first** result. If empty, stop with "No pending tasks found."
+1. `notion_query_database` — database ID: `[YOUR_NOTION_DATABASE_ID]`, filter:
+   - `Status = To Do`
+   - `Agent = [your identity]` OR `Agent = Any`
+   - Your identity: `Claude Code` if running from `CLAUDE.md`, `GitHub Copilot` if running from `.github/copilot-instructions.md`
+2. Take the **first** matching result. If empty, stop with "No pending tasks for this agent."
 3. `notion_update_page` — set `Status` to `In Progress`
 4. Read `Task Name`, `Description`, and any other properties carefully.
 

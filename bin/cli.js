@@ -471,12 +471,203 @@ function installSkillsMissing(dbId, vaultPath) {
   }
 }
 
+// ─── Update Main ─────────────────────────────────────────────────────────────
+
+/**
+ * `npx create-notion-agent update`
+ *
+ * Force-overwrites all instruction & skill files with the latest versions from
+ * the bundled templates while preserving existing MCP settings, shell scripts,
+ * and anything else the user may have customised.
+ *
+ * Files UPDATED (overwritten):
+ *   CLAUDE.md, GEMINI.md, .github/copilot-instructions.md
+ *   .claude/agents/*.md
+ *   .github/skills/**  and  .claude/skills/**
+ *
+ * Files PRESERVED (never touched):
+ *   .claude/settings.json, .gemini/settings.json
+ *   init.sh, start-work.sh, analyze-arch.sh
+ */
+async function updateMain() {
+  const VERSION = '1.6.1';
+
+  print('');
+  print(bold(cyan('╔══════════════════════════════════════════╗')));
+  print(bold(cyan(`║      create-notion-agent  v${VERSION}        ║`)));
+  print(bold(cyan('║   update — refresh instruction files     ║')));
+  print(bold(cyan('╚══════════════════════════════════════════╝')));
+  print('');
+  print(dim('Overwrites CLAUDE.md / copilot-instructions.md / GEMINI.md and all skill'));
+  print(dim('files with the latest bundled templates.  MCP settings are never touched.'));
+  print(dim(`Target: ${TARGET_DIR}`));
+  print('');
+
+  // ── Detect installed targets ──
+  const targets = detectInstalledTargets();
+  if (targets.size === 0) {
+    print(red('✖  No agent config found in this directory.'));
+    print(dim('   Run npx create-notion-agent first to do a full setup.'));
+    print('');
+    process.exit(1);
+  }
+
+  print(bold('Detected agent configs:'));
+  for (const t of targets) print(green(`  ✔ ${t}`));
+  print('');
+
+  // ── Recover existing DB ID and vault path ──
+  let dbId = null;
+  let vaultPath = null;
+
+  const configCandidates = [
+    path.join(TARGET_DIR, 'CLAUDE.md'),
+    path.join(TARGET_DIR, 'GEMINI.md'),
+    path.join(TARGET_DIR, '.github', 'copilot-instructions.md'),
+  ];
+  for (const f of configCandidates) {
+    if (fs.existsSync(f)) {
+      const extracted = extractConfig(f);
+      if (!dbId && extracted.dbId) dbId = extracted.dbId;
+      if (!vaultPath && extracted.vaultPath) vaultPath = extracted.vaultPath;
+    }
+  }
+
+  if (dbId)      print(dim(`  DB ID recovered:     ${dbId}`));
+  else           print(yellow('  ⚠  Notion DB ID not found — placeholders will be used'));
+  if (vaultPath) print(dim(`  Vault path recovered: ${vaultPath}`));
+  else           print(yellow('  ⚠  Obsidian vault path not found — placeholders will be used'));
+  print('');
+
+  const replacements = {
+    '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]',
+    '{{OBSIDIAN_VAULT}}': vaultPath || '[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]',
+  };
+
+  // ── Confirm ──
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  print(bold(yellow('⚠  This will overwrite your current instruction files with the latest templates.')));
+  print(dim('   Shell scripts (init.sh, start-work.sh) and MCP settings.json are NOT touched.'));
+  print('');
+  const confirm = (await ask(rl, yellow('Proceed? [y/N]: '))).trim().toLowerCase();
+  rl.close();
+
+  if (confirm !== 'y' && confirm !== 'yes') {
+    print(yellow('\nAborted — no files were changed.'));
+    print('');
+    process.exit(0);
+  }
+
+  print('');
+  print(bold('Updating files...'));
+
+  let updatedCount = 0;
+
+  function overwrite(src, dest, reps) {
+    if (!fs.existsSync(src)) return;
+    if (reps) {
+      copyFileWithReplacements(src, dest, reps);
+    } else {
+      copyFile(src, dest);
+    }
+    print(green(`  ✔ ${path.relative(TARGET_DIR, dest)}`));
+    updatedCount++;
+  }
+
+  function overwriteDir(srcDir, destDir, reps) {
+    if (!fs.existsSync(srcDir)) return;
+    fs.mkdirSync(destDir, { recursive: true });
+    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+      const srcPath  = path.join(srcDir, entry.name);
+      const destPath = path.join(destDir, entry.name);
+      if (entry.isDirectory()) {
+        overwriteDir(srcPath, destPath, reps);
+      } else if (entry.name.endsWith('.md')) {
+        overwrite(srcPath, destPath, reps);
+      } else {
+        // non-md files (scripts etc.) in skill subdirs — overwrite as-is
+        copyFile(srcPath, destPath);
+        if (entry.name.endsWith('.sh')) makeExecutable(destPath);
+        print(green(`  ✔ ${path.relative(TARGET_DIR, destPath)}`));
+        updatedCount++;
+      }
+    }
+  }
+
+  try {
+    // ── Claude instruction file + agents ──
+    if (targets.has('claude')) {
+      overwrite(
+        path.join(TEMPLATES_DIR, 'claude', 'CLAUDE.md'),
+        path.join(TARGET_DIR, 'CLAUDE.md'),
+        replacements
+      );
+
+      const agentsTemplateDir = path.join(TEMPLATES_DIR, 'claude', 'agents');
+      const agentsTargetDir   = path.join(TARGET_DIR, '.claude', 'agents');
+      if (fs.existsSync(agentsTemplateDir)) {
+        for (const file of fs.readdirSync(agentsTemplateDir).filter(f => f.endsWith('.md'))) {
+          overwrite(
+            path.join(agentsTemplateDir, file),
+            path.join(agentsTargetDir, file),
+            null
+          );
+        }
+      }
+    }
+
+    // ── Gemini instruction file ──
+    if (targets.has('gemini')) {
+      overwrite(
+        path.join(TEMPLATES_DIR, 'gemini', 'GEMINI.md'),
+        path.join(TARGET_DIR, 'GEMINI.md'),
+        replacements
+      );
+    }
+
+    // ── Copilot instruction file ──
+    if (targets.has('copilot')) {
+      overwrite(
+        path.join(TEMPLATES_DIR, 'copilot', 'copilot-instructions.md'),
+        path.join(TARGET_DIR, '.github', 'copilot-instructions.md'),
+        replacements
+      );
+    }
+
+    // ── Skills (all detected targets share the same skill templates) ──
+    const skillsTemplateDir = path.join(TEMPLATES_DIR, 'skills');
+    if (fs.existsSync(skillsTemplateDir)) {
+      const skillNames = fs.readdirSync(skillsTemplateDir).filter(f =>
+        fs.statSync(path.join(skillsTemplateDir, f)).isDirectory()
+      );
+      for (const skillName of skillNames) {
+        const srcSkillDir = path.join(skillsTemplateDir, skillName);
+        for (const prefix of ['.github', '.claude']) {
+          overwriteDir(
+            srcSkillDir,
+            path.join(TARGET_DIR, prefix, 'skills', skillName),
+            replacements
+          );
+        }
+      }
+    }
+  } catch (err) {
+    print('\n' + red('Error: ' + err.message));
+    process.exit(1);
+  }
+
+  print('');
+  print(bold(green(`✅  Update complete!  (${updatedCount} file${updatedCount !== 1 ? 's' : ''} refreshed)`)));
+  print(dim('   Run `npx create-notion-agent sync` to fill in any newly added scaffold files.'));
+  print('');
+}
+
 // ─── Sync Main ───────────────────────────────────────────────────────────────
 
 async function syncMain() {
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
-  print(bold(cyan('║      create-notion-agent  v1.4.0         ║')));
+  print(bold(cyan('║      create-notion-agent  v1.6.1         ║')));
   print(bold(cyan('║         sync — fill in missing files     ║')));
   print(bold(cyan('╚══════════════════════════════════════════╝')));
   print('');
@@ -546,12 +737,267 @@ async function syncMain() {
   print('');
 }
 
+// ─── Dispatch Main ───────────────────────────────────────────────────────────
+
+async function dispatchMain() {
+  const VERSION = '1.6.1';
+
+  print('');
+  print(bold(cyan('╔══════════════════════════════════════════╗')));
+  print(bold(cyan(`║      create-notion-agent  v${VERSION}        ║`)));
+  print(bold(cyan('║  dispatch — multi-agent dispatch system  ║')));
+  print(bold(cyan('╚══════════════════════════════════════════╝')));
+  print('');
+  print(dim('Installs the dispatch-agent-tasks skill and overwrites CLAUDE.md /'));
+  print(dim('copilot-instructions.md with dispatch-aware templates.'));
+  print(dim(`Target: ${TARGET_DIR}`));
+  print('');
+
+  // ── Detect installed targets ──
+  const targets = detectInstalledTargets();
+  if (targets.size === 0) {
+    print(red('✖  No agent config found in this directory.'));
+    print(dim('   Run npx create-notion-agent first to do a full setup.'));
+    print('');
+    process.exit(1);
+  }
+
+  print(bold('Detected agent configs:'));
+  for (const t of targets) print(green(`  ✔ ${t}`));
+  print('');
+
+  // ── Recover existing config ──
+  let dbId = null;
+  let vaultPath = null;
+  const configCandidates = [
+    path.join(TARGET_DIR, 'CLAUDE.md'),
+    path.join(TARGET_DIR, 'GEMINI.md'),
+    path.join(TARGET_DIR, '.github', 'copilot-instructions.md'),
+  ];
+  for (const f of configCandidates) {
+    if (fs.existsSync(f)) {
+      const extracted = extractConfig(f);
+      if (!dbId && extracted.dbId) dbId = extracted.dbId;
+      if (!vaultPath && extracted.vaultPath) vaultPath = extracted.vaultPath;
+    }
+  }
+
+  if (dbId)      print(dim(`  DB ID recovered:      ${dbId}`));
+  else           print(yellow('  ⚠  Notion DB ID not found — placeholders will be used'));
+  if (vaultPath) print(dim(`  Vault path recovered: ${vaultPath}`));
+  else           print(yellow('  ⚠  Obsidian vault path not found — placeholders will be used'));
+  print('');
+
+  const replacements = {
+    '{{DB_ID}}': dbId || '[YOUR_NOTION_DATABASE_ID]',
+    '{{OBSIDIAN_VAULT}}': vaultPath || '[YOUR_OBSIDIAN_VAULT_ABSOLUTE_PATH]',
+  };
+
+  // ── Confirm ──
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  print(bold(yellow('⚠  This will overwrite CLAUDE.md, copilot-instructions.md, and install the')));
+  print(bold(yellow('   dispatch-agent-tasks skill + dispatch-orchestrator agent.')));
+  print('');
+  const confirm = (await ask(rl, yellow('Proceed? [y/N]: '))).trim().toLowerCase();
+  rl.close();
+
+  if (confirm !== 'y' && confirm !== 'yes') {
+    print(yellow('\nAborted — no files were changed.'));
+    print('');
+    process.exit(0);
+  }
+
+  print('');
+  print(bold('Installing dispatch system...'));
+
+  let installedCount = 0;
+
+  function overwrite(src, dest, reps) {
+    if (!fs.existsSync(src)) return;
+    if (reps) {
+      copyFileWithReplacements(src, dest, reps);
+    } else {
+      copyFile(src, dest);
+    }
+    print(green(`  ✔ ${path.relative(TARGET_DIR, dest)}`));
+    installedCount++;
+  }
+
+  function overwriteDir(srcDir, destDir, reps) {
+    if (!fs.existsSync(srcDir)) return;
+    fs.mkdirSync(destDir, { recursive: true });
+    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+      const srcPath  = path.join(srcDir, entry.name);
+      const destPath = path.join(destDir, entry.name);
+      if (entry.isDirectory()) {
+        overwriteDir(srcPath, destPath, reps);
+      } else if (entry.name.endsWith('.md')) {
+        overwrite(srcPath, destPath, reps);
+      } else {
+        copyFile(srcPath, destPath);
+        if (entry.name.endsWith('.sh')) makeExecutable(destPath);
+        print(green(`  ✔ ${path.relative(TARGET_DIR, destPath)}`));
+        installedCount++;
+      }
+    }
+  }
+
+  try {
+    if (targets.has('claude')) {
+      overwrite(
+        path.join(TEMPLATES_DIR, 'claude', 'CLAUDE.md'),
+        path.join(TARGET_DIR, 'CLAUDE.md'),
+        replacements
+      );
+      overwrite(
+        path.join(TEMPLATES_DIR, 'claude', 'agents', 'dispatch-orchestrator.md'),
+        path.join(TARGET_DIR, '.claude', 'agents', 'dispatch-orchestrator.md'),
+        replacements
+      );
+    }
+
+    if (targets.has('copilot')) {
+      overwrite(
+        path.join(TEMPLATES_DIR, 'copilot', 'copilot-instructions.md'),
+        path.join(TARGET_DIR, '.github', 'copilot-instructions.md'),
+        replacements
+      );
+    }
+
+    const skillSrc = path.join(TEMPLATES_DIR, 'skills', 'dispatch-agent-tasks');
+    if (fs.existsSync(skillSrc)) {
+      for (const prefix of ['.github', '.claude']) {
+        overwriteDir(
+          skillSrc,
+          path.join(TARGET_DIR, prefix, 'skills', 'dispatch-agent-tasks'),
+          replacements
+        );
+      }
+    } else {
+      print(yellow('  ⚠  dispatch-agent-tasks skill template not found — skipped'));
+    }
+  } catch (err) {
+    print('\n' + red('Error: ' + err.message));
+    process.exit(1);
+  }
+
+  print('');
+  print(bold(green(`✅  Dispatch system installed!  (${installedCount} file${installedCount !== 1 ? 's' : ''})`)));
+  print('');
+  print(bold('Prerequisites:'));
+  print(dim('  • Claude Code CLI:    https://claude.ai/code'));
+  print(dim('  • GitHub Copilot CLI: npm install -g @github/copilot-cli'));
+  print('');
+  print(bold('Usage:'));
+  print('  In VS Code Copilot Chat:');
+  print(dim('    "dispatch the next agent task"'));
+  print('  Directly:');
+  print(dim('    bash .github/skills/dispatch-agent-tasks/scripts/dispatch.sh "Task" "id" "desc" "claude"'));
+  print(dim('    bash .github/skills/dispatch-agent-tasks/scripts/dispatch.sh "Task" "id" "desc" "copilot"'));
+  print('');
+  print(bold('Routing:'));
+  print(dim('  Claude Code  — SWE, frontend, backend, QA tasks'));
+  print(dim('  Copilot CLI  — DevOps, cloud, database, infrastructure tasks'));
+  print(dim('  (Agent=Any tasks are auto-classified by keyword — see routing-rules.md)'));
+  print('');
+}
+
+// ─── Force Main ──────────────────────────────────────────────────────────────
+
+async function forceMain() {
+  const VERSION = '1.6.1';
+
+  print('');
+  print(bold(cyan('╔══════════════════════════════════════════╗')));
+  print(bold(cyan(`║      create-notion-agent  v${VERSION}        ║`)));
+  print(bold(cyan('║   force — hard reset ALL agent files     ║')));
+  print(bold(cyan('╚══════════════════════════════════════════╝')));
+  print('');
+  print(dim('Overwrites EVERY agent file — including shell scripts and MCP settings.'));
+  print(dim('Use this to recover from a broken install or to reset to the latest templates.'));
+  print(dim(`Target: ${TARGET_DIR}`));
+  print('');
+
+  // ── Detect installed targets ──
+  const targets = detectInstalledTargets();
+  if (targets.size === 0) {
+    print(red('✖  No agent config found in this directory.'));
+    print(dim('   Run npx create-notion-agent first to do a full setup.'));
+    print('');
+    process.exit(1);
+  }
+
+  print(bold('Detected agent configs:'));
+  for (const t of targets) print(green(`  ✔ ${t}`));
+  print('');
+
+  // ── Recover existing config ──
+  let dbId = null;
+  let vaultPath = null;
+  const configCandidates = [
+    path.join(TARGET_DIR, 'CLAUDE.md'),
+    path.join(TARGET_DIR, 'GEMINI.md'),
+    path.join(TARGET_DIR, '.github', 'copilot-instructions.md'),
+  ];
+  for (const f of configCandidates) {
+    if (fs.existsSync(f)) {
+      const extracted = extractConfig(f);
+      if (!dbId && extracted.dbId) dbId = extracted.dbId;
+      if (!vaultPath && extracted.vaultPath) vaultPath = extracted.vaultPath;
+    }
+  }
+
+  if (dbId)      print(dim(`  DB ID recovered:      ${dbId}`));
+  else           print(yellow('  ⚠  Notion DB ID not found — placeholders will be used'));
+  if (vaultPath) print(dim(`  Vault path recovered: ${vaultPath}`));
+  else           print(yellow('  ⚠  Obsidian vault path not found — placeholders will be used'));
+  print('');
+
+  // ── Optional Notion token ──
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  print(bold('Notion API Token  (required to reset MCP settings.json)'));
+  print(dim('  Leave blank to skip resetting MCP settings.'));
+  const token = (await ask(rl, yellow('API Token (or Enter to skip): '))).trim();
+
+  // ── Confirm ──
+  print('');
+  print(bold(red('⚠  HARD RESET: This will overwrite ALL files including init.sh, start-work.sh,')));
+  print(bold(red('   analyze-arch.sh, and .claude/settings.json / .gemini/settings.json.')));
+  print(bold(red('   Any local customisations will be permanently lost.')));
+  print('');
+  const confirm = (await ask(rl, red('Type "force" to confirm hard reset: '))).trim();
+  rl.close();
+
+  if (confirm !== 'force') {
+    print(yellow('\nAborted — no files were changed.'));
+    print('');
+    process.exit(0);
+  }
+
+  print('');
+  print(bold('Force-resetting all agent files...'));
+
+  try {
+    if (targets.has('claude'))  installClaude(dbId, token, vaultPath);
+    if (targets.has('gemini'))  installGemini(dbId, token, vaultPath);
+    if (targets.has('copilot')) installCopilot(dbId, vaultPath);
+  } catch (err) {
+    print('\n' + red('Error: ' + err.message));
+    process.exit(1);
+  }
+
+  print('');
+  print(bold(green('✅  Force reset complete! All agent files restored to latest templates.')));
+  print(dim('   Run `npx create-notion-agent dispatch` to also install the multi-agent dispatch system.'));
+  print('');
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
-  print(bold(cyan('║      create-notion-agent  v1.4.0         ║')));
+  print(bold(cyan('║      create-notion-agent  v1.6.1         ║')));
   print(bold(cyan('║  Notion-powered autonomous agent setup   ║')));
   print(bold(cyan('╚══════════════════════════════════════════╝')));
   print('');
@@ -710,6 +1156,21 @@ async function main() {
 const subcommand = process.argv[2];
 if (subcommand === 'sync') {
   syncMain().catch(err => {
+    process.stderr.write('Fatal: ' + err.message + '\n');
+    process.exit(1);
+  });
+} else if (subcommand === 'update' || subcommand === 'upgrade') {
+  updateMain().catch(err => {
+    process.stderr.write('Fatal: ' + err.message + '\n');
+    process.exit(1);
+  });
+} else if (subcommand === 'dispatch') {
+  dispatchMain().catch(err => {
+    process.stderr.write('Fatal: ' + err.message + '\n');
+    process.exit(1);
+  });
+} else if (subcommand === 'force') {
+  forceMain().catch(err => {
     process.stderr.write('Fatal: ' + err.message + '\n');
     process.exit(1);
   });
