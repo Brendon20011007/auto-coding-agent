@@ -44,13 +44,46 @@ This installs dependencies and ensures the Obsidian vault directory structure ex
 
 Also read `CONTRIBUTING.md` and any linter config files for project style rules.
 
-### Step 2: Fetch Next Task from Notion
+### Step 2: Fetch & Classify All Tasks
 
-1. Use the Notion MCP tool `notion_query_database` to query the Target Database.
-2. Filter the query strictly for items where `Status` is `To Do`.
-3. Pick the FIRST task in the list. If there are no `To Do` tasks, output "No pending tasks found in Notion. Waiting..." and STOP execution.
-4. IMMEDIATELY use `notion_update_page` to change the selected task's `Status` to `In Progress`.
-5. Read the `Description` property carefully to understand the requirement.
+Before picking up work, fetch the entire `To Do` queue and classify every task so you have full visibility of what is pending and who should handle each item.
+
+1. Use `notion_query_database` to fetch **all** tasks where `Status` is `To Do` (no agent filter — retrieve everything).
+2. For each task, apply this classification rule:
+
+   | `Agent` field    | Keyword in name or description | → Assigned to      |
+   |------------------|--------------------------------|--------------------|
+   | `Claude Code`    | —                              | **Claude Code**    |
+   | `GitHub Copilot` | —                              | **GitHub Copilot** |
+   | `Any`            | DevOps/DB keyword (see below)  | **GitHub Copilot** |
+   | `Any`            | *(no keyword match — default)* | **Claude Code**    |
+
+   **DevOps/DB keywords** (case-insensitive, matched anywhere in task name or description):
+   `docker`, `terraform`, `aws`, `kubernetes`, `k8s`, `ci/cd`, `cicd`, `pipeline`,
+   `database`, `migration`, `rls`, `supabase`, `cloud`, `s3`, `lambda`, `ecs`,
+   `nginx`, `deployment`, `infrastructure`, `helm`, `vpc`, `iam`, `devops`
+
+3. Output a classification summary before proceeding:
+
+   ```
+   📋 Task Queue — [N] tasks pending
+
+   Task Name                          | Agent Field    | Assigned To
+   -----------------------------------|----------------|-------------------
+   Add user profile page              | Claude Code    | → Claude Code
+   Set up Supabase RLS policies       | GitHub Copilot | → GitHub Copilot
+   Fix login redirect bug             | Any            | → Claude Code
+   Add orders DB migration            | Any            | → GitHub Copilot
+
+   Claude Code (2):    Add user profile page, Fix login redirect bug
+   GitHub Copilot (2): Set up Supabase RLS policies, Add orders DB migration
+   ```
+
+4. From the classified list, pick the **first** task assigned to **Claude Code** (i.e. `Agent` is `Claude Code`, or `Agent` is `Any` with no DevOps/DB keyword match).
+5. If no Claude Code tasks exist in the queue, output:
+   `"No pending tasks for Claude Code. [N] task(s) are queued for GitHub Copilot."` and STOP.
+6. IMMEDIATELY use `notion_update_page` to set that task's `Status` to `In Progress`.
+7. Read the task's `Description` property carefully to understand the full requirement.
 
 ### Step 3: Implement the Task
 

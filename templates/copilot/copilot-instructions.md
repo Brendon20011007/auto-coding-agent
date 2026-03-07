@@ -59,17 +59,46 @@ The agent detects project type at runtime by scanning config files (`package.jso
 
 Installs dependencies and verifies MCP server connections are active.
 
-### 2. Find Your Task
+### 2. Fetch & Classify All Tasks
 
-This agent is **GitHub Copilot**. Only pick up tasks assigned to this agent.
+Before picking up work, fetch the entire `To Do` queue and classify every task so you have full visibility of what is pending and who should handle each item.
 
-Query Notion for tasks matching **both** conditions:
-- `Status = To Do`
-- `Agent = GitHub Copilot` **OR** `Agent = Any`
+1. Use `notion_query_database` to fetch **all** tasks where `Status` is `To Do` (no agent filter — retrieve everything).
+2. For each task, apply this classification rule:
 
-Pick the first matching item, update its `Status` to `In Progress` immediately, and read the `Description` field carefully.
+   | `Agent` field    | Keyword in name or description | → Assigned to      |
+   |------------------|--------------------------------|--------------------|
+   | `Claude Code`    | —                              | **Claude Code**    |
+   | `GitHub Copilot` | —                              | **GitHub Copilot** |
+   | `Any`            | DevOps/DB keyword (see below)  | **GitHub Copilot** |
+   | `Any`            | *(no keyword match — default)* | **Claude Code**    |
 
-> If a task's `Agent` is `Claude Code`, **skip it** — that task belongs to Claude Code.
+   **DevOps/DB keywords** (case-insensitive, matched anywhere in task name or description):
+   `docker`, `terraform`, `aws`, `kubernetes`, `k8s`, `ci/cd`, `cicd`, `pipeline`,
+   `database`, `migration`, `rls`, `supabase`, `cloud`, `s3`, `lambda`, `ecs`,
+   `nginx`, `deployment`, `infrastructure`, `helm`, `vpc`, `iam`, `devops`
+
+3. Output a classification summary before proceeding:
+
+   ```
+   📋 Task Queue — [N] tasks pending
+
+   Task Name                          | Agent Field    | Assigned To
+   -----------------------------------|----------------|-------------------
+   Add user profile page              | Claude Code    | → Claude Code
+   Set up Supabase RLS policies       | GitHub Copilot | → GitHub Copilot
+   Fix login redirect bug             | Any            | → Claude Code
+   Add orders DB migration            | Any            | → GitHub Copilot
+
+   Claude Code (2):    Add user profile page, Fix login redirect bug
+   GitHub Copilot (2): Set up Supabase RLS policies, Add orders DB migration
+   ```
+
+4. From the classified list, pick the **first** task assigned to **GitHub Copilot** (i.e. `Agent` is `GitHub Copilot`, or `Agent` is `Any` with a DevOps/DB keyword match).
+5. If no GitHub Copilot tasks exist in the queue, output:
+   `"No pending tasks for GitHub Copilot. [N] task(s) are queued for Claude Code."` and STOP.
+6. IMMEDIATELY use `notion_update_page` to set that task's `Status` to `In Progress`.
+7. Read the task's `Description` property carefully to understand the full requirement.
 
 ### 3. Knowledge Research (before any implementation)
 
@@ -176,49 +205,3 @@ If a task cannot be completed:
 7. **One commit per task** — All changes in a single commit.
 8. **Never skip Notion updates** — Status transitions (`To Do` → `In Progress` → `Done`/`Blocked`) are mandatory.
 9. **Stop if blocked** — Do not commit; update Notion to `Blocked` and output blocking info.
-10. **Headless mode** — When invoked with `TASK_CONTEXT:`, skip Notion fetch and use the injected `name`, `id`, and `description` directly. Still update Notion at the end using the injected page ID.
-
----
-
-## Orchestrator Mode (`dispatch-agent-tasks` skill)
-
-When the `dispatch-agent-tasks` VS Code Agent Skill is triggered (say "dispatch the
-next agent task" in Copilot Chat), this agent acts as the **dispatcher**:
-
-### Routing Logic
-
-| `Agent` field | Keyword match in name/description | → CLI invoked |
-|---|---|---|
-| `Claude Code` | — | `claude --dangerously-skip-permissions -p "TASK_CONTEXT: ..."` |
-| `GitHub Copilot` | — | `copilot -p "TASK_CONTEXT: ..."` |
-| `Any` | docker, terraform, aws, kubernetes, k8s, ci/cd, cicd, pipeline, database, migration, rls, supabase, cloud, s3, lambda, ecs, nginx, deployment, infrastructure, helm, vpc, iam, devops | `copilot -p "TASK_CONTEXT: ..."` |
-| `Any` | *(no match — default)* | `claude --dangerously-skip-permissions -p "TASK_CONTEXT: ..."` |
-
-### Dispatch Workflow
-
-1. `notion_query_database` → Status=`To Do`, take first task
-2. Read `Agent` field + description → apply routing table above
-3. `notion_update_page` → Status: `In Progress`
-4. Run `dispatch.sh`:
-   ```bash
-   bash .github/skills/dispatch-agent-tasks/scripts/dispatch.sh \
-     "<task_name>" "<page_id>" "<description>" "<claude|copilot>"
-   ```
-5. On exit 0 → `notion_update_page` → Status: `Done`
-6. On non-zero exit → `notion_update_page` → Status: `Blocked`, write error to `Agent Report`
-
-### Headless Prompt Format (injected into each agent)
-
-```
-TASK_CONTEXT: name=<task> | id=<page_id> | description=<desc>
-
-You are operating in headless dispatch mode. Follow your agent instructions file
-exactly. The task is already In Progress. Skip Notion fetch. Update Notion at the end.
-```
-
-### CLI Prerequisites
-
-| Agent | CLI | Install |
-|-------|-----|---------|
-| Claude Code | `claude` | https://claude.ai/code |
-| GitHub Copilot | `copilot` | `npm install -g @github/copilot-cli` |

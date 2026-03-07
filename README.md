@@ -36,19 +36,38 @@ Starting from v1.5.0, `create-notion-agent` supports a **two-agent system** wher
 
 ### Task Routing
 
-Each Notion task has an **`Agent`** property (select field) that determines which agent picks it up:
+Each Notion task has an **`Agent`** property (select field). When an agent session starts, it fetches **all** `To Do` tasks at once and classifies every task before picking one up:
 
-| `Agent` value | Picked up by |
-|---------------|--------------|
-| `Claude Code` | Claude Code only |
-| `GitHub Copilot` | GitHub Copilot Agent only |
-| `Any` | Whichever agent runs next |
+| `Agent` value | Keyword in task name or description | → Assigned to |
+|---------------|-------------------------------------|---------------|
+| `Claude Code` | — | Claude Code |
+| `GitHub Copilot` | — | GitHub Copilot Agent |
+| `Any` | DevOps/DB keyword (see below) | GitHub Copilot Agent |
+| `Any` | *(no keyword match — default)* | Claude Code |
 
-Agents filter task queries by their own identity — Claude Code skips `GitHub Copilot` tasks and vice versa. Both agents claim only the **first matching** `To Do` task and immediately set it to `In Progress`.
+**DevOps/DB keywords** (case-insensitive): `docker`, `terraform`, `aws`, `kubernetes`, `k8s`, `ci/cd`, `pipeline`, `database`, `migration`, `rls`, `supabase`, `cloud`, `s3`, `lambda`, `ecs`, `nginx`, `deployment`, `infrastructure`, `helm`, `vpc`, `iam`, `devops`
+
+Before picking up a task each agent prints a full classification summary:
+
+```
+📋 Task Queue — 4 tasks pending
+
+Task Name                          | Agent Field    | Assigned To
+-----------------------------------|----------------|-------------------
+Add user profile page              | Claude Code    | → Claude Code
+Set up Supabase RLS policies       | GitHub Copilot | → GitHub Copilot
+Fix login redirect bug             | Any            | → Claude Code
+Add orders DB migration            | Any            | → GitHub Copilot
+
+Claude Code (2):    Add user profile page, Fix login redirect bug
+GitHub Copilot (2): Set up Supabase RLS policies, Add orders DB migration
+```
+
+Each agent then picks only the **first task assigned to itself** and sets it to `In Progress`.
 
 ### Running Both Agents in Parallel
 
-Because each agent has its own task filter, you can run Claude Code and GitHub Copilot Agent simultaneously against the same Notion database safely. They will never claim the same task.
+Because each agent classifies the full queue and picks only its own tasks, you can run Claude Code and GitHub Copilot Agent simultaneously against the same Notion database safely. They will never claim the same task.
 
 ### Delegation Rule
 
@@ -104,6 +123,7 @@ This command:
 - Auto-detects which agents you have installed (Claude Code, Gemini, Copilot)
 - Recovers your existing Notion Database ID and Obsidian vault path from current files
 - **Overwrites** `CLAUDE.md`, `GEMINI.md`, `copilot-instructions.md`, and all skill files with the latest versions
+- **Removes** any skill directories that exist on disk but are no longer present in the current templates (e.g. skills removed in a new version)
 - **Preserves** `settings.json` (MCP config), `init.sh`, `start-work.sh`, and `progress.txt`
 - Asks for confirmation before making any changes
 
@@ -221,7 +241,7 @@ your-project/
 **`CLAUDE.md`** contains the full SOP the agent follows:
 1. Run `init.sh` to set up the environment + create Obsidian vault directories
 2. **Scan the project** for config files (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `Makefile`, etc.) to auto-detect the stack and derive lint / test / build commands
-3. Query Notion for the first `To Do` task → set to `In Progress`
+3. Fetch **all** `To Do` tasks from Notion → classify by agent ownership → print summary table → pick first task for this agent → set to `In Progress`
 4. Search Obsidian vault (`Architecture/` + `Troubleshooting/`) for relevant context
 5. Implement the task following conventions and Obsidian learnings
 6. Run the **lint gate**, **test gate**, and **build gate** (all auto-detected — zero errors required)
@@ -327,10 +347,10 @@ Two [Agent Skills](https://docs.github.com/en/copilot/concepts/agents/about-agen
 
 | Skill | Trigger phrases | What it does |
 |-------|----------------|--------------|
-| **`run-next-task`** | "start working", "run the next task", "pick up a task from Notion", "execute the agent loop" | Fetches the next `To Do` task **assigned to the current agent** from Notion, implements it, passes all quality gates, commits, and marks it `Done` |
+| **`run-next-task`** | "start working", "run the next task", "pick up a task from Notion", "execute the agent loop" | Fetches **all** `To Do` tasks from Notion, prints a full classification table showing which tasks belong to which agent, then picks up the first task assigned to the current agent — implements it, passes all quality gates, commits, and marks it `Done` |
 | **`add-coding-task`** | "add a task", "I want to implement X", "put this in the backlog", "schedule this for the agent" | Gathers title, description, acceptance criteria, and **which agent should handle it**, then creates a `To Do` page in your Notion database with the `Agent` property set |
 
-> **v1.5.0 change:** `run-next-task` now filters by **agent identity** — Claude Code only picks up tasks where `Agent` is `Claude Code` or `Any`; GitHub Copilot Agent only picks up `GitHub Copilot` or `Any` tasks. This enables both agents to work from the same board simultaneously without collision.
+> **v1.7.0 change:** `run-next-task` now fetches all `To Do` tasks and classifies them by agent ownership before picking one up. Each agent session prints a full queue summary (Claude Code tasks vs GitHub Copilot tasks) so you always know the full state of the backlog at a glance.
 
 Skills are stored in both `.github/skills/` (read by Copilot) and `.claude/skills/` (read by Claude Code) — installed once, works in both. The Notion Database ID is substituted at install time.
 
@@ -399,10 +419,11 @@ Every agent session follows this exact sequence:
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
-│ Step 2  Fetch Task                                          │
-│         notion_query_database → filter Status = "To Do"     │
-│                              + Agent = [self] OR "Any"      │
-│         notion_update_page   → set Status = "In Progress"   │
+│ Step 2  Fetch & Classify All Tasks                          │
+│         notion_query_database → ALL Status = "To Do" tasks  │
+│         Classify each by Agent field + DevOps/DB keywords   │
+│         Print full classification table (Task | Assigned To)│
+│         Pick first task for this agent → set "In Progress"  │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐

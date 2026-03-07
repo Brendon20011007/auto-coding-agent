@@ -110,6 +110,38 @@ If the vault path is not configured or no relevant files exist, continue to Step
 
 If the project has no explicit test command, validate with a lint + build check at minimum.
 
+### Step 4.5: Code Review & Quality Gate
+
+**MANDATORY review before commit** — Run the automated code review skill to ensure quality standards.
+
+After all testing gates pass:
+
+1. **Invoke the code review skill:**
+   - Use GitHub Copilot's `agent-skills-code-review-router-main` skill to review all changed files
+   - Provide:
+     - List of changed files (from `git diff --name-only`)
+     - Summary of changes and task context
+     - Affected feature areas
+
+2. **Wait for review results:**
+   - ✅ **APPROVE** — All quality gates passed; proceed to Step 5  
+   - ⚠️ **CHANGES REQUESTED** — Fix reported issues and re-run review  
+   - ❌ **REJECT** — Critical issues found; do NOT proceed to commit
+
+3. **Review criteria:**
+   - Type safety: No `any` types without justification
+   - React patterns: Proper hooks, dependency arrays, key props
+   - Security: No hardcoded secrets, proper input validation
+   - Performance: No N+1 queries, efficient renders
+   - Consistency: Matches existing codebase patterns
+
+4. **After passing review:**
+   - Output confirmation: `"✅ Code review passed. Ready to commit."`
+   - Ask user: `"Ready to commit? (Y/N)"`
+   - **Only proceed to Step 5** after user confirms
+
+**If review fails:** Do NOT commit. Fix reported issues, re-run code review, and iterate until APPROVED.
+
 ### Step 5: Document Post-Mortem (Obsidian) & Update Progress
 
 **Obsidian Post-Mortem** (only if bugs or non-obvious design decisions were encountered):

@@ -80,19 +80,46 @@ Also read `CONTRIBUTING.md`, `.editorconfig`, and any linter config files — tr
 
 If no recognised config is found, check the task description or README for guidance.
 
-### Step 2: Fetch Task from Notion
+### Step 2: Fetch & Classify All Tasks
 
-This agent is **Claude Code**. Only pick up tasks assigned to this agent.
+Before picking up work, fetch the entire `To Do` queue and classify every task so you have full visibility of what is pending and who should handle each item.
 
-1. Use the Notion MCP tool `notion_query_database` to query the Target Database.
-2. Filter the query for items where **both** conditions are true:
-   - `Status` is `To Do`
-   - `Agent` is `Claude Code` **OR** `Agent` is `Any`
-3. Pick the FIRST matching task. If there are no matching tasks, output "No pending tasks for Claude Code in Notion. Waiting..." and STOP execution.
-4. IMMEDIATELY use `notion_update_page` to change the selected task's `Status` to `In Progress`.
-5. Read the `Description` property carefully to understand the requirement.
+1. Use `notion_query_database` to fetch **all** tasks where `Status` is `To Do` (no agent filter — retrieve everything).
+2. For each task, apply this classification rule:
 
-> If a task's `Agent` is `GitHub Copilot`, **skip it** — that task belongs to GitHub Copilot Agent.
+   | `Agent` field    | Keyword in name or description | → Assigned to      |
+   |------------------|--------------------------------|--------------------|
+   | `Claude Code`    | —                              | **Claude Code**    |
+   | `GitHub Copilot` | —                              | **GitHub Copilot** |
+   | `Any`            | DevOps/DB keyword (see below)  | **GitHub Copilot** |
+   | `Any`            | *(no keyword match — default)* | **Claude Code**    |
+
+   **DevOps/DB keywords** (case-insensitive, matched anywhere in task name or description):
+   `docker`, `terraform`, `aws`, `kubernetes`, `k8s`, `ci/cd`, `cicd`, `pipeline`,
+   `database`, `migration`, `rls`, `supabase`, `cloud`, `s3`, `lambda`, `ecs`,
+   `nginx`, `deployment`, `infrastructure`, `helm`, `vpc`, `iam`, `devops`
+
+3. Output a classification summary before proceeding:
+
+   ```
+   📋 Task Queue — [N] tasks pending
+
+   Task Name                          | Agent Field    | Assigned To
+   -----------------------------------|----------------|-------------------
+   Add user profile page              | Claude Code    | → Claude Code
+   Set up Supabase RLS policies       | GitHub Copilot | → GitHub Copilot
+   Fix login redirect bug             | Any            | → Claude Code
+   Add orders DB migration            | Any            | → GitHub Copilot
+
+   Claude Code (2):    Add user profile page, Fix login redirect bug
+   GitHub Copilot (2): Set up Supabase RLS policies, Add orders DB migration
+   ```
+
+4. From the classified list, pick the **first** task assigned to **Claude Code** (i.e. `Agent` is `Claude Code`, or `Agent` is `Any` with no DevOps/DB keyword match).
+5. If no Claude Code tasks exist in the queue, output:
+   `"No pending tasks for Claude Code. [N] task(s) are queued for GitHub Copilot."` and STOP.
+6. IMMEDIATELY use `notion_update_page` to set that task's `Status` to `In Progress`.
+7. Read the task's `Description` property carefully to understand the full requirement.
 
 ### Step 3: Knowledge Retrieval (Obsidian RAG)
 
@@ -139,6 +166,38 @@ END LOOP
 ```
 
 If the project has no explicit test command, validate with a lint + build + browser check at minimum.
+
+### Step 4.5: Code Review & Quality Gate
+
+**MANDATORY review before commit** — Run the automated code review skill to ensure quality standards.
+
+After all testing gates (lint, test, build, browser) pass:
+
+1. **Invoke the code review skill:**
+   - Use GitHub Copilot's `agent-skills-code-review-router-main` skill to review all changed files
+   - Provide:
+     - List of changed files (from `git diff --name-only`)
+     - Summary of changes and task context
+     - Affected feature areas
+
+2. **Wait for review results:**
+   - ✅ **APPROVE** — All quality gates passed; proceed to Step 5  
+   - ⚠️ **CHANGES REQUESTED** — Fix reported issues and re-run review  
+   - ❌ **REJECT** — Critical issues found; do NOT proceed to commit
+
+3. **Review criteria:**
+   - Type safety: No `any` types without justification
+   - React patterns: Proper hooks, dependency arrays, key props
+   - Security: No hardcoded secrets, proper input validation
+   - Performance: No N+1 queries, efficient renders
+   - Consistency: Matches existing codebase patterns
+
+4. **After passing review:**
+   - Output confirmation: `"✅ Code review PASSED. Quality gates cleared."`
+   - Ask user: `"Ready to commit? (Y/N)"`
+   - **Only proceed to Step 5** after user confirms
+
+**If review fails:** Do NOT commit. Fix reported issues, re-run code review, and iterate until APPROVED.
 
 ### Step 5: Document Post-Mortem (Obsidian) & Update Progress
 
