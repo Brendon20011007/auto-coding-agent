@@ -47,23 +47,25 @@ Each Notion task has an **`Agent`** property (select field). When an agent sessi
 
 **DevOps/DB keywords** (case-insensitive): `docker`, `terraform`, `aws`, `kubernetes`, `k8s`, `ci/cd`, `pipeline`, `database`, `migration`, `rls`, `supabase`, `cloud`, `s3`, `lambda`, `ecs`, `nginx`, `deployment`, `infrastructure`, `helm`, `vpc`, `iam`, `devops`
 
-Before picking up a task each agent prints a full classification summary:
+Before picking up a task each agent fetches all tasks, sorts them by Phase priority, and prints a full classification summary:
 
 ```
-📋 Task Queue — 4 tasks pending
+📋 Task Queue — 4 tasks pending (sorted by Phase priority)
 
-Task Name                          | Agent Field    | Assigned To
------------------------------------|----------------|-------------------
-Add user profile page              | Claude Code    | → Claude Code
-Set up Supabase RLS policies       | GitHub Copilot | → GitHub Copilot
-Fix login redirect bug             | Any            | → Claude Code
-Add orders DB migration            | Any            | → GitHub Copilot
+Phase              | Task Name                          | Agent Field    | Assigned To
+-------------------|------------------------------------|----------------|-------------------
+Bug Fix            | Fix login redirect bug             | Any            | → Claude Code
+Sprint 1           | Set up Supabase RLS policies       | GitHub Copilot | → GitHub Copilot
+Sprint 1           | Add user profile page              | Claude Code    | → Claude Code
+Sprint 2           | Add orders DB migration            | Any            | → GitHub Copilot
 
-Claude Code (2):    Add user profile page, Fix login redirect bug
+Claude Code (2):    Fix login redirect bug, Add user profile page
 GitHub Copilot (2): Set up Supabase RLS policies, Add orders DB migration
 ```
 
-Each agent then picks only the **first task assigned to itself** and sets it to `In Progress`.
+**Phase priority order:** `ADR` → `Bug Fix` → `Sprint 1` → `Sprint 2` → `Sprint 3` → ... → tasks with no Phase
+
+Each agent then picks only the **first task assigned to itself from the sorted list** and sets it to `In Progress`.
 
 ### Running Both Agents in Parallel
 
@@ -157,8 +159,11 @@ The agent expects a Notion database with these exact properties:
 | `Description` | Text | Full task requirements — the agent reads this |
 | `Agent Report` | Text | Written by the agent after completing or blocking |
 | `Agent` | Select | One of: `Claude Code`, `GitHub Copilot`, `Any` — controls which agent picks up the task |
+| `Phase` | Select | Sprint/phase identifier (e.g., `ADR`, `Bug Fix`, `Sprint 1`, `Sprint 2`) — used for task prioritization |
 
 > **New in v1.5.0:** You must add the `Agent` select property to your Notion database and set its allowed values to `Claude Code`, `GitHub Copilot`, and `Any`. Existing tasks without an `Agent` value will not be picked up by either agent until a value is assigned — set them to `Any` to let the next available agent claim them.
+
+> **New in v1.7.4:** The `Phase` property enables priority-based task sorting. Tasks are picked in this order: `ADR` → `Bug Fix` → `Sprint 1` → `Sprint 2` → `Sprint 3` → ... → tasks with no Phase. This ensures critical fixes and architecture decisions are handled before feature work.
 
 ### Status Lifecycle
 

@@ -1,6 +1,6 @@
 {
   "name": "create-notion-agent",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "description": "Scaffold a Notion-integrated autonomous agent workflow for Claude Code, Gemini CLI, or GitHub Copilot with MCP verification",
   "bin": {
     "create-notion-agent": "bin/cli.js"

@@ -82,10 +82,13 @@ If no recognised config is found, check the task description or README for guida
 
 ### Step 2: Fetch & Classify All Tasks
 
-Before picking up work, fetch the entire `To Do` queue and classify every task so you have full visibility of what is pending and who should handle each item.
+Before picking up work, fetch the entire `To Do` queue, sort by Phase priority, and classify every task so you have full visibility of what is pending and who should handle each item.
 
-1. Use `notion_query_database` to fetch **all** tasks where `Status` is `To Do` (no agent filter — retrieve everything).
-2. For each task, apply this classification rule:
+1. Use `notion_query_database` to fetch **all** tasks where `Status` is `To Do` (no agent filter — retrieve everything). Include the `Phase` property.
+2. **Sort tasks by Phase priority** (highest priority first):
+   - **Phase priority order:** `ADR` → `Bug Fix` → `Sprint 1` → `Sprint 2` → `Sprint 3` → ... → tasks with no Phase
+   - Within the same Phase, maintain the original order from Notion
+3. For each task, apply this classification rule:
 
    | `Agent` field    | Keyword in name or description | → Assigned to      |
    |------------------|--------------------------------|--------------------|
@@ -102,24 +105,26 @@ Before picking up work, fetch the entire `To Do` queue and classify every task s
 3. Output a classification summary before proceeding:
 
    ```
-   📋 Task Queue — [N] tasks pending
+   📋 Task Queue — [N] tasks pending (sorted by Phase priority)
 
-   Task Name                          | Agent Field    | Assigned To
-   -----------------------------------|----------------|-------------------
-   Add user profile page              | Claude Code    | → Claude Code
-   Set up Supabase RLS policies       | GitHub Copilot | → GitHub Copilot
-   Fix login redirect bug             | Any            | → Claude Code
-   Add orders DB migration            | Any            | → GitHub Copilot
+   Phase              | Task Name                          | Agent Field    | Assigned To
+   -------------------|------------------------------------|----------------|-------------------
+   Bug Fix            | Fix login redirect bug             | Any            | → Claude Code
+   Sprint 1           | Set up Supabase RLS policies       | GitHub Copilot | → GitHub Copilot
+   Sprint 1           | Add user profile page              | Claude Code    | → Claude Code
+   Sprint 2           | Add orders DB migration            | Any            | → GitHub Copilot
 
-   Claude Code (2):    Add user profile page, Fix login redirect bug
+   Claude Code (2):    Fix login redirect bug, Add user profile page
    GitHub Copilot (2): Set up Supabase RLS policies, Add orders DB migration
+
+   ⚡ Next task for Claude Code: "Fix login redirect bug" (Phase: Bug Fix)
    ```
 
-4. From the classified list, pick the **first** task assigned to **Claude Code** (i.e. `Agent` is `Claude Code`, or `Agent` is `Any` with no DevOps/DB keyword match).
+4. From the classified and sorted list, pick the **first** task assigned to **Claude Code** (i.e. `Agent` is `Claude Code`, or `Agent` is `Any` with no DevOps/DB keyword match).
 5. If no Claude Code tasks exist in the queue, output:
    `"No pending tasks for Claude Code. [N] task(s) are queued for GitHub Copilot."` and STOP.
 6. IMMEDIATELY use `notion_update_page` to set that task's `Status` to `In Progress`.
-7. Read the task's `Description` property carefully to understand the full requirement.
+7. Read the task's `Description` and `Phase` properties carefully to understand the full requirement and sprint context.
 
 ### Step 3: Knowledge Retrieval (Obsidian RAG)
 

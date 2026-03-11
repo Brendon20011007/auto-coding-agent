@@ -62,9 +62,11 @@ This agent is **Claude Code**. Only pick up tasks assigned to this agent.
 2. Filter the query for items where **both** conditions are true:
    - `Status` is `To Do`
    - `Agent` is `Claude Code` **OR** `Agent` is `Any`
-3. Pick the FIRST matching task. If there are no matching tasks, output "No pending tasks for Claude Code in Notion. Waiting..." and STOP execution.
-4. IMMEDIATELY use `notion_update_page` to change the selected task's `Status` to `In Progress`.
-5. Read the `Description` property carefully to understand the requirement.
+3. **Sort results by Phase priority** (highest priority first):
+   - **Phase priority order:** `ADR` → `Bug Fix` → `Sprint 1` → `Sprint 2` → `Sprint 3` → ... → tasks with no Phase
+4. Pick the FIRST task from the sorted list. If there are no matching tasks, output "No pending tasks for Claude Code in Notion. Waiting..." and STOP execution.
+5. IMMEDIATELY use `notion_update_page` to change the selected task's `Status` to `In Progress`.
+6. Read the `Description` and `Phase` properties carefully to understand the requirement and sprint context.
 
 > If a task's `Agent` is `GitHub Copilot`, **skip it** — that task belongs to GitHub Copilot Agent.
 
