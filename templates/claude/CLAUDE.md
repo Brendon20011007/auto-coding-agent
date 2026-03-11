@@ -123,10 +123,10 @@ After all testing gates pass:
      - Summary of changes and task context
      - Affected feature areas
 
-2. **Wait for review results:**
-   - ✅ **APPROVE** — All quality gates passed; proceed to Step 5  
-   - ⚠️ **CHANGES REQUESTED** — Fix reported issues and re-run review  
-   - ❌ **REJECT** — Critical issues found; do NOT proceed to commit
+2. **Wait for review results — iterate until `✅ APPROVED`:**
+   - ✅ **APPROVED** — All quality gates passed; proceed to Step 4.6
+   - ⚠️ **CHANGES REQUESTED** — Fix ALL reported issues, re-invoke the skill, and repeat. **No iteration cap** — do not proceed until `✅ APPROVED` is received.
+   - ❌ **REJECTED** — Critical issues found; do NOT commit. Trigger the Blocking Protocol immediately.
 
 3. **Review criteria:**
    - Type safety: No `any` types without justification
@@ -135,12 +135,31 @@ After all testing gates pass:
    - Performance: No N+1 queries, efficient renders
    - Consistency: Matches existing codebase patterns
 
-4. **After passing review:**
-   - Output confirmation: `"✅ Code review passed. Ready to commit."`
-   - Ask user: `"Ready to commit? (Y/N)"`
-   - **Only proceed to Step 5** after user confirms
+4. **After passing review (`✅ APPROVED`):**
+   - Output: `"✅ Code review PASSED. Proceeding to infrastructure review gate (Step 4.6)."`
 
-**If review fails:** Do NOT commit. Fix reported issues, re-run code review, and iterate until APPROVED.
+**If review fails:** Do NOT commit. Fix ALL reported issues, re-invoke the skill, and iterate until `✅ APPROVED`. There is no iteration cap.
+
+### Step 4.6: Cloud Infra Review Gate
+
+**MANDATORY for any infrastructure or database changes — delegated to GitHub Copilot Agent.**
+
+Check `git diff --name-only` for any of these file types:
+- Terraform: `*.tf`, `*.tfvars`
+- AWS CDK: files in `infra/`, `cdk/`, `lib/` containing CDK imports
+- CloudFormation: `*.yaml`/`*.json` with `AWSTemplateFormatVersion`
+- Kubernetes: `*.yaml` with `kind:` field
+- SQL/Supabase: `*.sql`, `supabase/migrations/`, filenames matching `*migration*`
+- Docker: `Dockerfile`, `docker-compose*.yml`, `compose.yml`
+
+**If any match:** Pause and request GitHub Copilot Agent to run `agent-skills-cloud-infra-review`. Wait for the result before proceeding.
+
+**Gate rule:**
+- `✅ APPROVED` → proceed to Step 5
+- `⚠️ CHANGES REQUESTED` → fix all reported issues and re-run `agent-skills-cloud-infra-review`; iterate until APPROVED
+- `❌ REJECTED` → trigger the Blocking Protocol; do NOT commit; do NOT run any apply/deploy command
+
+**If no infra files changed:** skip this step and proceed to Step 5.
 
 ### Step 5: Document Post-Mortem (Obsidian) & Update Progress
 
@@ -191,6 +210,14 @@ IMPORTANT: All code changes MUST be committed, and Notion MUST be updated atomic
    git add .
    git commit -m "[Notion Task Name] - completed"
    ```
+
+3. **Git Push — Requires Explicit User Permission**
+
+   Output: `"✅ All gates passed. Changes committed locally. Ready to push to remote? (Y/N)"`
+   - **Y** → run `git push`
+   - **N** → stop and inform: `"Changes remain on local branch only. Push skipped."`
+
+   > **CRITICAL:** Do NOT push automatically. Always wait for explicit user confirmation.
 
 ---
 
@@ -259,3 +286,6 @@ The agent reads these files at the start of every session and uses the commands 
 9. **Never skip Notion updates** — Status transitions (`To Do` → `In Progress` → `Done`/`Blocked`) are mandatory.
 10. **Stop if blocked** — Do not commit; update Notion to `Blocked` and output blocking info.
 11. **Headless mode** — When invoked with `TASK_CONTEXT:`, skip Notion fetch and use the injected `name`, `id`, and `description` directly. Still update Notion at the end.
+12. **Mandatory code review before commit** — `agent-skills-code-review-router-main` must return `✅ APPROVED`. Fix all issues and re-run until approved; no iteration cap.
+13. **Mandatory infra review before apply** — Any Terraform / CDK / SQL / K8s / Docker change must pass `agent-skills-cloud-infra-review` (`✅ APPROVED`) before `terraform apply`, `cdk deploy`, `supabase db push`, or `kubectl apply`.
+14. **No automatic git push** — After committing, ask user for explicit permission before running `git push`.

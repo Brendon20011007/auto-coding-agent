@@ -490,7 +490,7 @@ function installSkillsMissing(dbId, vaultPath) {
  *   init.sh, start-work.sh, analyze-arch.sh
  */
 async function updateMain() {
-  const VERSION = '1.7.1';
+  const VERSION = '1.7.3';
 
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
@@ -682,7 +682,7 @@ async function updateMain() {
 async function syncMain() {
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
-  print(bold(cyan('║      create-notion-agent  v1.7.1         ║')));
+  print(bold(cyan('║      create-notion-agent  v1.7.3         ║')));
   print(bold(cyan('║         sync — fill in missing files     ║')));
   print(bold(cyan('╚══════════════════════════════════════════╝')));
   print('');
@@ -756,7 +756,7 @@ async function syncMain() {
 // ─── Force Main ──────────────────────────────────────────────────────────────
 
 async function forceMain() {
-  const VERSION = '1.7.1';
+  const VERSION = '1.7.3';
 
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
@@ -848,7 +848,7 @@ async function forceMain() {
 async function main() {
   print('');
   print(bold(cyan('╔══════════════════════════════════════════╗')));
-  print(bold(cyan('║      create-notion-agent  v1.7.1         ║')));
+  print(bold(cyan('║      create-notion-agent  v1.7.3         ║')));
   print(bold(cyan('║  Notion-powered autonomous agent setup   ║')));
   print(bold(cyan('╚══════════════════════════════════════════╝')));
   print('');

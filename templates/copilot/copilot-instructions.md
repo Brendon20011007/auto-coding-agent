@@ -132,10 +132,64 @@ Before marking complete, run the relevant quality gates:
 1. **Lint** — run the stack lint command (`npm run lint`, `ruff check .`, etc.). Zero errors.
 2. **Tests** — run the test command for your stack. All must pass.
 3. **Build** — run the build command if applicable. Must succeed.
-4. **Migration validation** — if a DB migration was written, confirm it applies cleanly:
+4. **Migration syntax check** — if a DB migration was written, validate syntax only (dry-run, do NOT apply yet):
    ```bash
-   supabase db push   # or equivalent migration runner
+   supabase db diff   # syntax validation only — do NOT push yet
    ```
+
+### 5.5. Code Review Gate
+
+**MANDATORY before commit for any code change.**
+
+1. Invoke `agent-skills-code-review-router-main` on all changed files.
+2. Wait for verdict:
+   - ✅ **APPROVED** — proceed to Step 5.6
+   - ⚠️ **CHANGES REQUESTED** — fix ALL reported issues, re-invoke the skill, and repeat. **No iteration cap.**
+   - ❌ **REJECTED** — trigger the Blocking Protocol; do NOT commit
+
+### 5.6. Cloud Infra Review Gate
+
+**MANDATORY for any infrastructure or database change — uses `agent-skills-cloud-infra-review` with Copilot CLI only (enterprise-level review). Never falls back to Gemini.**
+
+Check `git diff --name-only` for any of these file types:
+- Terraform: `*.tf`, `*.tfvars`
+- AWS CDK: files in `infra/`, `cdk/`, `lib/` containing CDK imports
+- CloudFormation: `*.yaml`/`*.json` with `AWSTemplateFormatVersion`
+- Kubernetes: `*.yaml` with `kind:` field
+- SQL/Supabase: `*.sql`, `supabase/migrations/`, filenames matching `*migration*`
+- Docker: `Dockerfile`, `docker-compose*.yml`, `compose.yml`
+
+**If any match:** invoke `agent-skills-cloud-infra-review`:
+- ✅ **APPROVED** → proceed to Step 5.7
+- ⚠️ **CHANGES REQUESTED** → fix ALL reported issues and re-invoke; iterate until APPROVED. No iteration cap.
+- ❌ **REJECTED** → trigger the Blocking Protocol; do NOT apply/deploy or commit
+
+**If no infra/DB files changed:** skip to Step 6.
+
+### 5.7. Apply / Deploy
+
+**Only run after `✅ APPROVED` from Step 5.6.**
+
+Execute the applicable command for the change type:
+
+```bash
+# Terraform
+terraform plan && terraform apply
+
+# AWS CDK
+cdk deploy
+
+# Supabase / SQL
+supabase db push
+
+# Kubernetes
+kubectl apply -f .
+
+# Docker
+docker compose up -d
+```
+
+> ⚠️ **CRITICAL:** Running any of these commands without `✅ APPROVED` from `agent-skills-cloud-infra-review` is a policy violation and MUST NOT happen.
 
 ### 6. Update Progress
 
@@ -159,6 +213,14 @@ Append to `progress.txt`:
    git add .
    git commit -m "[Task Name] - completed"
    ```
+
+3. **Git Push — Requires Explicit User Permission**
+
+   Output: `"✅ All gates passed. Changes committed locally. Ready to push to remote? (Y/N)"`
+   - **Y** → run `git push`
+   - **N** → stop and inform: `"Changes remain on local branch only. Push skipped."`
+
+   > **CRITICAL:** Do NOT push automatically. Always wait for explicit user confirmation.
 
 ---
 
@@ -200,8 +262,11 @@ If a task cannot be completed:
 2. **Research before implementing** — Always consult Context7, AWS Knowledge, or GitHub MCP before writing schemas or IaC.
 3. **Never touch frontend/backend code** — Delegate React components, API routes, and business logic to Claude Code.
 4. **RLS on every table** — All new Supabase tables must have explicit Row Level Security policies.
-5. **Test migrations before committing** — Run migrations against a local/test environment first.
-6. **Document in progress.txt** — Append a summary after each task.
-7. **One commit per task** — All changes in a single commit.
-8. **Never skip Notion updates** — Status transitions (`To Do` → `In Progress` → `Done`/`Blocked`) are mandatory.
-9. **Stop if blocked** — Do not commit; update Notion to `Blocked` and output blocking info.
+5. **Test migrations before committing** — Run dry-run validation only; never push before code and infra review gates pass.
+6. **Mandatory code review before commit** — `agent-skills-code-review-router-main` must return `✅ APPROVED`. Fix all issues and re-run until approved; no iteration cap.
+7. **Mandatory infra review before apply** — `agent-skills-cloud-infra-review` must return `✅ APPROVED` before any `terraform apply`, `cdk deploy`, `supabase db push`, or `kubectl apply`. Uses Copilot CLI only — no Gemini fallback.
+8. **No automatic git push** — After committing, ask user for explicit permission before running `git push`.
+9. **Document in progress.txt** — Append a summary after each task.
+10. **One commit per task** — All changes in a single commit.
+11. **Never skip Notion updates** — Status transitions (`To Do` → `In Progress` → `Done`/`Blocked`) are mandatory.
+12. **Stop if blocked** — Do not commit; update Notion to `Blocked` and output blocking info.
